@@ -10,7 +10,7 @@ class MotorBrushless:
     # Parámetros de duty para todos los motores brushless
     DUTY_MIN = 5.0   # Duty mínimo (motor quieto)
     DUTY_MAX = 10.0  # Duty máximo (motor máxima velocidad)
-    DUTY_START = 5 # Duty para arrancar suavemente
+    DUTY_START = 0 # Duty para arrancar suavemente
     DUTY_STEP = 0.5  # Incremento/decremento por cada clic
 
     def __init__(self, nombre, pin_pwm):

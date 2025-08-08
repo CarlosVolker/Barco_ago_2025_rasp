@@ -8,6 +8,8 @@ from controladores.instancias import motores_brushless, timones, torretas
 
 INCREMENTO_TORRETA = 5
 INCREMENTO_TIMON = 5
+# Incremento de duty para el motor brushless por cada clic
+INCREMENTO_DUTY = 0.5
 
 # Estado actual de cada componente
 estado_torretas = [90 for _ in torretas]  # Asume centro en 90°
@@ -53,8 +55,10 @@ def main():
     print("Control manual: presiona teclas según el mapeo. Ctrl+C para salir.")
     print("Si mantienes presionada una tecla, el movimiento será continuo.")
     motor = motores_brushless[0]
-    # Inicializar el ESC automáticamente al iniciar el test
+    # Inicializar el ESC automáticamente al iniciar el test (sin mover el motor)
     motor.inicializar_esc()
+    print(f"\n[INFO] Nivel inicial del motor: {motor.nivel} | Duty inicial: {motor.nivel_a_duty():.2f}%")
+    print(f"[INFO] Incremento de duty por clic: {INCREMENTO_DUTY}")
     try:
         while True:
             tecla = getch().lower()
@@ -76,10 +80,16 @@ def main():
                     timones[0].establecer_angulo(estado_timon)
                     accion_realizada = True
                 elif tecla == FLECHA_ARR:
-                    motor.subir_nivel()
+                    # Subir duty en 0.5
+                    nuevo_duty = motor.nivel_a_duty() + INCREMENTO_DUTY
+                    motor.set_nivel_duty(nuevo_duty)
+                    print(f"[MOTOR] Duty aumentado a: {nuevo_duty:.2f}%")
                     accion_realizada = True
                 elif tecla == FLECHA_ABA:
-                    motor.bajar_nivel()
+                    # Bajar duty en 0.5
+                    nuevo_duty = motor.nivel_a_duty() - INCREMENTO_DUTY
+                    motor.set_nivel_duty(nuevo_duty)
+                    print(f"[MOTOR] Duty disminuido a: {nuevo_duty:.2f}%")
                     accion_realizada = True
                 elif tecla == '\x03':  # Ctrl+C
                     print("\nSaliendo...")

@@ -7,11 +7,11 @@ class MotorBrushless:
     _pwm_instances = {}
 
     # Parámetros de nivel y duty para todos los motores brushless
-    NIVEL_MIN = 1
+    NIVEL_MIN = 0
     NIVEL_MAX = 10
-    NIVEL_ACTIVO = 5  # El motor solo se mueve a partir de este nivel
-    DUTY_MIN = 5.5
-    DUTY_MAX = 7
+    NIVEL_ACTIVO = 5.5  # El motor solo se mueve a partir de este nivel
+    DUTY_MIN = 5
+    DUTY_MAX = 10
 
     def __init__(self, nombre, pin_pwm):
         self.nombre = nombre

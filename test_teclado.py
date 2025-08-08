@@ -25,10 +25,10 @@ mapa_torretas = {
     'x': (3, INCREMENTO_TORRETA),
 }
 
-FLECHA_IZQ = '\x1b[D'
-FLECHA_DER = '\x1b[C'
-FLECHA_ARR = '\x1b[A'
-FLECHA_ABA = '\x1b[B'
+FLECHA_IZQ = '\x1b[d'
+FLECHA_DER = '\x1b[c'
+FLECHA_ARR = '\x1b[a'
+FLECHA_ABA = '\x1b[b'
 
 # Para detectar si una tecla está presionada continuamente
 try:

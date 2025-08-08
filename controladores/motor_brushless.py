@@ -116,15 +116,14 @@ class MotorBrushless:
     def establecer_velocidad(self, velocidad):
         """
         Establece la velocidad y dirección del motor (modo clásico, -100 a 100).
-        Si quieres usar niveles, usa set_nivel, subir_nivel o bajar_nivel.
+        Ahora velocidad 0 corresponde a 5% de duty (DUTY_MIN), y 100 a DUTY_MAX.
         """
         if velocidad < -100:
             velocidad = -100
         elif velocidad > 100:
             velocidad = 100
 
-        # Mapear -100 a 100 a 1000us a 2000us (1500us es stop)
-        pulso_us = int(1500 + (velocidad * 5))
-        duty = (pulso_us / 20000) * 100  # 20ms periodo para 50Hz
+        # Mapear -100 a 100 a DUTY_MIN a DUTY_MAX
+        duty = MotorBrushless.DUTY_MIN + ((velocidad + 100) / 200) * (MotorBrushless.DUTY_MAX - MotorBrushless.DUTY_MIN)
         self.pwm.ChangeDutyCycle(duty)
-        print(f"[Motor {self.nombre}] Velocidad: {velocidad} | PWM: {pulso_us}us | Duty: {duty:.2f}%")
+        print(f"[Motor {self.nombre}] Velocidad: {velocidad} | Duty: {duty:.2f}%")

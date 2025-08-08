@@ -4,16 +4,15 @@ import termios
 import tty
 import os
 import time
-from controladores.instancias import motores_brushless, timones, torretas
+from controladores.instancias import motores_brushless, torretas
 
 INCREMENTO_TORRETA = 5
 INCREMENTO_TIMON = 5
 # Incremento de duty para el motor brushless por cada clic
-INCREMENTO_DUTY = 0.5
 
-# Estado actual de cada componente
 estado_torretas = [90 for _ in torretas]  # Asume centro en 90°
-estado_timon = 90  # Asume centro en 90°
+estado_torreta1 = 90  # Para torreta 1 (antes timón)
+estado_torreta2 = 90  # Para torreta 2 (antes timón)
 
 # Mapas de teclas
 mapa_torretas = {
@@ -57,8 +56,8 @@ def main():
     motor = motores_brushless[0]
     # Inicializar el ESC automáticamente al iniciar el test (sin mover el motor)
     motor.inicializar_esc()
-    print(f"\n[INFO] Nivel inicial del motor: {motor.nivel} | Duty inicial: {motor.nivel_a_duty():.2f}%")
-    print(f"[INFO] Incremento de duty por clic: {INCREMENTO_DUTY}")
+    print(f"\n[INFO] Duty inicial del motor: {motor.duty_actual:.2f}% (quieto)")
+    print(f"[INFO] Incremento de duty por clic: {motor.DUTY_STEP}")
     try:
         while True:
             tecla = getch().lower()
@@ -72,24 +71,26 @@ def main():
                         torretas[idx].girar(estado_torretas[idx])
                         accion_realizada = True
                 elif tecla == FLECHA_IZQ:
-                    estado_timon -= INCREMENTO_TIMON
-                    timones[0].establecer_angulo(estado_timon)
-                    accion_realizada = True
+                    # Girar torreta 1 a la izquierda
+                    if len(torretas) > 0:
+                        estado_torreta1 -= INCREMENTO_TIMON
+                        torretas[0].girar(estado_torreta1)
+                        accion_realizada = True
                 elif tecla == FLECHA_DER:
-                    estado_timon += INCREMENTO_TIMON
-                    timones[0].establecer_angulo(estado_timon)
-                    accion_realizada = True
+                    # Girar torreta 2 a la derecha (o la misma si solo hay una)
+                    if len(torretas) > 1:
+                        estado_torreta2 += INCREMENTO_TIMON
+                        torretas[1].girar(estado_torreta2)
+                        accion_realizada = True
+                    elif len(torretas) == 1:
+                        estado_torreta1 += INCREMENTO_TIMON
+                        torretas[0].girar(estado_torreta1)
+                        accion_realizada = True
                 elif tecla == FLECHA_ARR:
-                    # Subir duty en 0.5
-                    nuevo_duty = motor.nivel_a_duty() + INCREMENTO_DUTY
-                    motor.set_nivel_duty(nuevo_duty)
-                    print(f"[MOTOR] Duty aumentado a: {nuevo_duty:.2f}%")
+                    motor.subir_duty()
                     accion_realizada = True
                 elif tecla == FLECHA_ABA:
-                    # Bajar duty en 0.5
-                    nuevo_duty = motor.nivel_a_duty() - INCREMENTO_DUTY
-                    motor.set_nivel_duty(nuevo_duty)
-                    print(f"[MOTOR] Duty disminuido a: {nuevo_duty:.2f}%")
+                    motor.bajar_duty()
                     accion_realizada = True
                 elif tecla == '\x03':  # Ctrl+C
                     print("\nSaliendo...")

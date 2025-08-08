@@ -3,14 +3,15 @@ import time
 
 
 
+
 class MotorBrushless:
     _pwm_instances = {}
 
-    # Parámetros de nivel y duty para todos los motores brushless
-    NIVEL_MIN = 0
-    NIVEL_MAX = 10
-    DUTY_MIN = 5.5  # Valor de duty mínimo (motor quieto)
-    DUTY_MAX = 11   # Valor de duty máximo (motor máxima velocidad)
+    # Parámetros de duty para todos los motores brushless
+    DUTY_MIN = 5.0   # Duty mínimo (motor quieto)
+    DUTY_MAX = 10.0  # Duty máximo (motor máxima velocidad)
+    DUTY_START = 5.5 # Duty para arrancar suavemente
+    DUTY_STEP = 0.5  # Incremento/decremento por cada clic
 
     def __init__(self, nombre, pin_pwm):
         self.nombre = nombre
@@ -22,7 +23,6 @@ class MotorBrushless:
             pwm.start(MotorBrushless.DUTY_MIN)
             MotorBrushless._pwm_instances[self.pin_pwm] = pwm
         self.pwm = MotorBrushless._pwm_instances[self.pin_pwm]
-        self.nivel = MotorBrushless.NIVEL_MIN
         self.duty_actual = MotorBrushless.DUTY_MIN
 
     def set_nivel_duty(self, duty):
@@ -31,6 +31,16 @@ class MotorBrushless:
         self.duty_actual = duty
         self.pwm.ChangeDutyCycle(duty)
         print(f"[Motor {self.nombre}] Duty aplicado: {duty:.2f}%")
+
+    def subir_duty(self):
+        nuevo_duty = self.duty_actual + MotorBrushless.DUTY_STEP
+        self.set_nivel_duty(nuevo_duty)
+        print(f"[Motor {self.nombre}] Duty aumentado a: {self.duty_actual:.2f}%")
+
+    def bajar_duty(self):
+        nuevo_duty = self.duty_actual - MotorBrushless.DUTY_STEP
+        self.set_nivel_duty(nuevo_duty)
+        print(f"[Motor {self.nombre}] Duty disminuido a: {self.duty_actual:.2f}%")
 
 
     def subir_nivel(self):

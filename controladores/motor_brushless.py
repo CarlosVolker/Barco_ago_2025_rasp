@@ -9,9 +9,8 @@ class MotorBrushless:
     # Parámetros de nivel y duty para todos los motores brushless
     NIVEL_MIN = 0
     NIVEL_MAX = 10
-    NIVEL_ACTIVO = 5.5  # El motor solo se mueve a partir de este nivel
-    DUTY_MIN = 5
-    DUTY_MAX = 10
+    DUTY_MIN = 5.5  # Valor de duty mínimo (motor quieto)
+    DUTY_MAX = 11   # Valor de duty máximo (motor máxima velocidad)
 
     def __init__(self, nombre, pin_pwm):
         self.nombre = nombre
@@ -20,10 +19,19 @@ class MotorBrushless:
         GPIO.setup(self.pin_pwm, GPIO.OUT)
         if self.pin_pwm not in MotorBrushless._pwm_instances:
             pwm = GPIO.PWM(self.pin_pwm, 50)  # 50 Hz para ESC
-            pwm.start(0)
+            pwm.start(MotorBrushless.DUTY_MIN)
             MotorBrushless._pwm_instances[self.pin_pwm] = pwm
         self.pwm = MotorBrushless._pwm_instances[self.pin_pwm]
         self.nivel = MotorBrushless.NIVEL_MIN
+        self.duty_actual = MotorBrushless.DUTY_MIN
+
+    def set_nivel_duty(self, duty):
+        # Limita el duty al rango permitido
+        duty = max(MotorBrushless.DUTY_MIN, min(MotorBrushless.DUTY_MAX, duty))
+        self.duty_actual = duty
+        self.pwm.ChangeDutyCycle(duty)
+        print(f"[Motor {self.nombre}] Duty aplicado: {duty:.2f}%")
+
 
     def subir_nivel(self):
         if self.nivel < MotorBrushless.NIVEL_MAX:
@@ -46,10 +54,8 @@ class MotorBrushless:
     def nivel_a_duty(self, nivel=None):
         if nivel is None:
             nivel = self.nivel
-        if nivel < MotorBrushless.NIVEL_ACTIVO:
-            return MotorBrushless.DUTY_MIN
-        # Mapeo lineal de nivel a duty
-        duty = MotorBrushless.DUTY_MIN + (MotorBrushless.DUTY_MAX - MotorBrushless.DUTY_MIN) * (nivel - MotorBrushless.NIVEL_ACTIVO) / (MotorBrushless.NIVEL_MAX - MotorBrushless.NIVEL_ACTIVO)
+        # Mapeo lineal de nivel a duty (0 a 10)
+        duty = MotorBrushless.DUTY_MIN + (MotorBrushless.DUTY_MAX - MotorBrushless.DUTY_MIN) * (nivel / (MotorBrushless.NIVEL_MAX - MotorBrushless.NIVEL_MIN))
         return min(max(duty, MotorBrushless.DUTY_MIN), MotorBrushless.DUTY_MAX)
 
     def aplicar_nivel(self):

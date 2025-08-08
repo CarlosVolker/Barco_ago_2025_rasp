@@ -53,6 +53,8 @@ def main():
     print("Control manual: presiona teclas según el mapeo. Ctrl+C para salir.")
     print("Si mantienes presionada una tecla, el movimiento será continuo.")
     motor = motores_brushless[0]
+    # Inicializar el ESC automáticamente al iniciar el test
+    motor.inicializar_esc()
     try:
         while True:
             tecla = getch().lower()

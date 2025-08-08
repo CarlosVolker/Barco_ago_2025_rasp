@@ -6,10 +6,8 @@ import os
 import time
 from controladores.instancias import motores_brushless, timones, torretas
 
-INCREMENTO_MOTOR = 5
 INCREMENTO_TORRETA = 5
 INCREMENTO_TIMON = 5
-velocidad_motor = 0
 
 # Estado actual de cada componente
 estado_torretas = [90 for _ in torretas]  # Asume centro en 90°
@@ -29,8 +27,8 @@ mapa_torretas = {
 
 FLECHA_IZQ = '\x1b[D'
 FLECHA_DER = '\x1b[C'
-FLECHA_ARR = '\x1b[a'
-FLECHA_ABA = '\x1b[b'
+FLECHA_ARR = '\x1b[A'
+FLECHA_ABA = '\x1b[B'
 
 # Para detectar si una tecla está presionada continuamente
 try:
@@ -51,9 +49,10 @@ def getch():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 def main():
-    global velocidad_motor, estado_torretas, estado_timon
+    global estado_torretas, estado_timon
     print("Control manual: presiona teclas según el mapeo. Ctrl+C para salir.")
     print("Si mantienes presionada una tecla, el movimiento será continuo.")
+    motor = motores_brushless[0]
     try:
         while True:
             tecla = getch().lower()
@@ -75,12 +74,10 @@ def main():
                     timones[0].establecer_angulo(estado_timon)
                     accion_realizada = True
                 elif tecla == FLECHA_ARR:
-                    velocidad_motor += INCREMENTO_MOTOR
-                    motores_brushless[0].establecer_velocidad(velocidad_motor)
+                    motor.subir_nivel()
                     accion_realizada = True
                 elif tecla == FLECHA_ABA:
-                    velocidad_motor -= INCREMENTO_MOTOR
-                    motores_brushless[0].establecer_velocidad(velocidad_motor)
+                    motor.bajar_nivel()
                     accion_realizada = True
                 elif tecla == '\x03':  # Ctrl+C
                     print("\nSaliendo...")

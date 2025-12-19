@@ -2,121 +2,113 @@
 import sys
 import termios
 import tty
-import os
 import time
-from controladores.instancias import motores_brushless, torretas
+from controladores.instancias import motores, servos_direccion, actuadores_multieje
 
-INCREMENTO_TORRETA = 5
-INCREMENTO_TIMON = 5
-# Incremento de duty para el motor brushless por cada clic
+# Ajustes de pasos para pruebas manuales
+PASO_ACTUADOR = 5
+PASO_MOTOR = 10 # Porcentaje de velocidad
 
-estado_torretas = [90 for _ in torretas]  # Asume centro en 90°
-estado_torreta1 = 90  # Para torreta 1 (antes timón)
-estado_torreta2 = 90  # Para torreta 2 (antes timón)
+# Estado inicial simulado (para seguimiento local)
+# En un sistema real leeríamos del hardware si fuera posible, o asumiríamos centro.
+velocidad_motor = 0
+angulo_direccion = 90
+angulo_ptz_pan = 90
+angulo_ptz_tilt = 90
 
-# Mapas de teclas
-mapa_torretas = {
-    '1': (0, -INCREMENTO_TORRETA),
-    '2': (0, INCREMENTO_TORRETA),
-    'q': (1, -INCREMENTO_TORRETA),
-    'w': (1, INCREMENTO_TORRETA),
-    'a': (2, -INCREMENTO_TORRETA),
-    's': (2, INCREMENTO_TORRETA),
-    'z': (3, -INCREMENTO_TORRETA),
-    'x': (3, INCREMENTO_TORRETA),
-}
-
-FLECHA_IZQ = '\x1b[d'
-FLECHA_DER = '\x1b[c'
-FLECHA_ARR = '\x1b[a'
-FLECHA_ABA = '\x1b[b'
-
-# Para detectar si una tecla está presionada continuamente
-try:
-    import select
-except ImportError:
-    select = None
+FLECHA_ARR = '\x1b[A'
+FLECHA_ABA = '\x1b[B'
+FLECHA_DER = '\x1b[C'
+FLECHA_IZQ = '\x1b[D'
 
 def getch():
+    """Lee un caracter sin esperar enter (Raw input)"""
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
         ch = sys.stdin.read(1)
         if ch == '\x1b':
-            ch += sys.stdin.read(2)  # Leer secuencia de flecha
+            ch += sys.stdin.read(2)
         return ch
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
+def imprimir_instrucciones():
+    print("\n=== TEST DE HARDWARE GENÉRICO ===")
+    print("Controles:")
+    print("  FLECHA ARRIBA/ABAJO: Motor de Propulsión (0)")
+    print("  FLECHA IZQ/DER: Servo de Dirección (0)")
+    print("  w/s: PTZ Tilt (Actuador 0)")
+    print("  a/d: PTZ Pan (Actuador 0)")
+    print("  SPACE: Parada de Emergencia")
+    print("  CTRL+C or q: Salir")
+    print("=================================\n")
+
 def main():
-    global estado_torretas, estado_timon
-    print("Control manual: presiona teclas según el mapeo. Ctrl+C para salir.")
-    print("Si mantienes presionada una tecla, el movimiento será continuo.")
-    motor = motores_brushless[0]
-    # Inicializar el ESC automáticamente al iniciar el test (sin mover el motor)
-    motor.inicializar_esc()
-    print(f"\n[INFO] Duty inicial del motor: {motor.duty_actual:.2f}% (quieto)")
-    print(f"[INFO] Incremento de duty por clic: {motor.DUTY_STEP}")
+    global velocidad_motor, angulo_direccion, angulo_ptz_pan, angulo_ptz_tilt
+    
+    # Inicializar ESCs si es necesario
+    for m in motores:
+        if hasattr(m, 'inicializar_esc'):
+            m.inicializar_esc()
+
+    imprimir_instrucciones()
+
     try:
         while True:
-            tecla = getch().lower()
-            # Movimiento continuo mientras la tecla esté presionada
-            while True:
-                accion_realizada = False
-                if tecla in mapa_torretas:
-                    idx, delta = mapa_torretas[tecla]
-                    if idx < len(torretas):
-                        estado_torretas[idx] += delta
-                        torretas[idx].girar(estado_torretas[idx])
-                        accion_realizada = True
-                elif tecla == FLECHA_IZQ:
-                    # Girar torreta 1 a la izquierda
-                    if len(torretas) > 0:
-                        estado_torreta1 -= INCREMENTO_TIMON
-                        torretas[0].girar(estado_torreta1)
-                        accion_realizada = True
-                elif tecla == FLECHA_DER:
-                    # Girar torreta 2 a la derecha (o la misma si solo hay una)
-                    if len(torretas) > 1:
-                        estado_torreta2 += INCREMENTO_TIMON
-                        torretas[1].girar(estado_torreta2)
-                        accion_realizada = True
-                    elif len(torretas) == 1:
-                        estado_torreta1 += INCREMENTO_TIMON
-                        torretas[0].girar(estado_torreta1)
-                        accion_realizada = True
-                elif tecla == FLECHA_ARR:
-                    motor.subir_duty()
-                    accion_realizada = True
-                elif tecla == FLECHA_ABA:
-                    motor.bajar_duty()
-                    accion_realizada = True
-                elif tecla == '\x03':  # Ctrl+C
-                    print("\nSaliendo...")
-                    return
-                else:
-                    if not accion_realizada:
-                        print(f"Tecla no asignada: {repr(tecla)}")
-                # Si la tecla sigue presionada, repetir acción
-                if select:
-                    dr, _, _ = select.select([sys.stdin], [], [], 0.08)
-                    if dr:
-                        tecla2 = sys.stdin.read(1)
-                        if tecla2 == '\x1b':
-                            tecla2 += sys.stdin.read(2)
-                        if tecla2.lower() == tecla:
-                            continue  # Mantener acción
-                        else:
-                            tecla = tecla2.lower()
-                            break
-                    else:
-                        break
-                else:
-                    time.sleep(0.08)
-                    break
-    except KeyboardInterrupt:
-        print("\nSaliendo...")
+            tecla = getch()
+            
+            if tecla == FLECHA_ARR:
+                velocidad_motor = min(100, velocidad_motor + PASO_MOTOR)
+                if motores: motores[0].establecer_velocidad(velocidad_motor)
+                
+            elif tecla == FLECHA_ABA:
+                velocidad_motor = max(-100, velocidad_motor - PASO_MOTOR)
+                if motores: motores[0].establecer_velocidad(velocidad_motor)
+
+            elif tecla == FLECHA_IZQ: # Izquierda = Menos ángulo
+                angulo_direccion = max(0, angulo_direccion - PASO_ACTUADOR)
+                if servos_direccion: servos_direccion[0].establecer_angulo(angulo_direccion)
+
+            elif tecla == FLECHA_DER: # Derecha = Más ángulo
+                angulo_direccion = min(180, angulo_direccion + PASO_ACTUADOR)
+                if servos_direccion: servos_direccion[0].establecer_angulo(angulo_direccion)
+
+            # Control PTZ (Asumiendo que es el primer actuador multieje)
+            elif tecla == 'w':
+                angulo_ptz_tilt = min(180, angulo_ptz_tilt + PASO_ACTUADOR)
+                if actuadores_multieje: actuadores_multieje[0].mover_eje('tilt', angulo_ptz_tilt)
+            
+            elif tecla == 's':
+                angulo_ptz_tilt = max(0, angulo_ptz_tilt - PASO_ACTUADOR)
+                if actuadores_multieje: actuadores_multieje[0].mover_eje('tilt', angulo_ptz_tilt)
+
+            elif tecla == 'd':
+                angulo_ptz_pan = max(0, angulo_ptz_pan - PASO_ACTUADOR) # Invertido visualmente a veces
+                if actuadores_multieje: actuadores_multieje[0].mover_eje('pan', angulo_ptz_pan)
+
+            elif tecla == 'a':
+                angulo_ptz_pan = min(180, angulo_ptz_pan + PASO_ACTUADOR)
+                if actuadores_multieje: actuadores_multieje[0].mover_eje('pan', angulo_ptz_pan)
+
+            elif tecla == ' ':
+                velocidad_motor = 0
+                for m in motores: m.establecer_velocidad(0)
+                print("¡PARADA DE EMERGENCIA!")
+
+            elif tecla == 'q' or tecla == '\x03':
+                break
+            
+            # Feedback visual limpio
+            sys.stdout.write(f"\rMotor: {velocidad_motor}% | Dir: {angulo_direccion}° | PTZ: {angulo_ptz_pan}°/{angulo_ptz_tilt}°   ")
+            sys.stdout.flush()
+
+    except Exception as e:
+        print(f"\nError durante la prueba: {e}")
+    finally:
+        print("\nDeteniendo todo...")
+        for m in motores: m.establecer_velocidad(0)
 
 if __name__ == "__main__":
     main()

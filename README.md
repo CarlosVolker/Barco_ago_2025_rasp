@@ -50,8 +50,22 @@ nano config/componentes.py
 ```
 
 ### 3. Instalación de Dependencias
+#### 3.1 Librerías del Sistema (Raspberry Pi OS)
+```bash
+sudo apt update
+sudo apt install libvpx-dev libopus-dev libffi-dev libssl-dev libavdevice-dev libavfilter-dev libavformat-dev libavcodec-dev libswscale-dev -y
+```
+
+#### 3.2 Librerías Python
 ```bash
 pip install -r requirements.txt
+```
+
+#### 3.3 Solución de Problemas Comunes (ImportError: libvpx)
+Si al ejecutar `main.py` recibes un error como `ImportError: libvpx.so.9: cannot open shared object file`, significa que la versión pre-compilada de `aiortc` no coincide con tu sistema. Soluciónalo reinstalando desde el código fuente:
+
+```bash
+pip install --upgrade --force-reinstall --no-binary aiortc aiortc
 ```
 
 ### 4. Prueba de Hardware (Opcional)

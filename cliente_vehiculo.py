@@ -1,14 +1,13 @@
 import asyncio
 import json
 import logging
-import cv2
 import os
+import platform
 import aiohttp
 from dotenv import load_dotenv
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCIceCandidate
-from aiortc.contrib.media import MediaRelay
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
+from aiortc.contrib.media import MediaPlayer
 import websockets
-import numpy as np
 
 # Importar configuración y controladores genéricos
 from config.credenciales import obtener_identidad, guardar_identidad, TOKEN_VINCULACION
@@ -27,37 +26,11 @@ URL_BACKEND = os.getenv("URL_BACKEND", "https://tu-api-backend.com")
 URL_SIGNALING = os.getenv("URL_SIGNALING", "wss://tu-api-backend.com/ws/vehiculo/")
 SERVIDOR_STUN = "stun:stun.l.google.com:19302"
 
-class PistaCamara(VideoStreamTrack):
-    """
-    Pista de video personalizada que captura fotogramas de la cámara usando OpenCV.
-    """
-    def __init__(self):
-        super().__init__()
-        # En Raspberry Pi, /dev/video0 es usualmente la cámara principal.
-        self.cap = cv2.VideoCapture(0)
-        
-    async def recv(self):
-        pts, time_base = await self.next_timestamp()
-        
-        ret, frame = self.cap.read()
-        if not ret:
-            # Crear un cuadro negro si la cámara falla
-            frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            
-        from av import VideoFrame
-        frame = VideoFrame.from_ndarray(frame, format="bgr24")
-        frame.pts = pts
-        frame.time_base = time_base
-        return frame
-
-    def stop(self):
-        self.cap.release()
-        super().stop()
-
 class ClienteVehiculo:
     def __init__(self):
         self.pc = None
         self.ws = None
+        self.player = None  # Referencia para mantener vivo el reproductor de video
         identidad = obtener_identidad()
         self.num_serie = identidad.get("num_serie") if identidad else None
         self.token = identidad.get("token") if identidad else None
@@ -189,11 +162,34 @@ class ClienteVehiculo:
         self.pc = RTCPeerConnection(configuration=config_rtc)
         
         try:
-            pista = PistaCamara()
-            self.pc.addTrack(pista)
-            logger.info("Pista de video añadida.")
+            # Determinamos plataforma para elegir formato de cámara
+            # 'v4l2' es estándar para Raspberry Pi / Linux
+            # 'dshow' o 'foundation' podría ser para Windows/Mac si pruebas local
+            format_video = "v4l2"
+            device_video = "/dev/video0"
+            opciones = {"video_size": "640x480", "framerate": "30"}
+
+            if platform.system() == "Windows":
+                 logger.warning("Detectado Windows: La cámara puede requerir configuración 'dshow' manual o no funcionar igual que en RPi.")
+                 format_video = "dshow"
+                 device_video = "video=Integrated Camera" # Ajustar según nombre real de cámara en Windows
+                 # Fallback simple si no estamos seguros del nombre en Windows:
+                 # Se intentará, pero es probable que falle si el nombre no coincide.
+            
+            # En Raspberry Pi forzamos v4l2
+            if platform.system() == "Linux":
+                format_video = "v4l2"
+                device_video = "/dev/video0"
+
+            logger.info(f"Iniciando cámara con formato: {format_video} en {device_video}")
+            
+            self.player = MediaPlayer(device_video, format=format_video, options=opciones)
+            self.pc.addTrack(self.player.video)
+            logger.info("Pista de video añadida (MediaPlayer).")
+
         except Exception as e:
             logger.error(f"Error al iniciar cámara: {e}")
+            logger.info("Continuando sin video...")
 
         @self.pc.on("datachannel")
         def on_datachannel(canal):

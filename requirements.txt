@@ -17,8 +17,8 @@ pyftdi==0.56.0
 pyserial==3.5
 pyusb==1.3.1
 typing_extensions==4.14.1
-aiortc==1.5.0
-av==9.2.0
+aiortc
+av
 aiohttp==3.9.3
 websockets==12.0
 python-dotenv

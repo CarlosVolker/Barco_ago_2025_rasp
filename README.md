@@ -62,10 +62,10 @@ pip install -r requirements.txt
 ```
 
 #### 3.3 Solución de Problemas Comunes (ImportError: libvpx)
-Si al ejecutar `main.py` recibes un error como `ImportError: libvpx.so.9: cannot open shared object file`, significa que la versión pre-compilada de `aiortc` no coincide con tu sistema. Soluciónalo reinstalando desde el código fuente:
+Si recibes errores de librerías (`libvpx`, `libffi`) o de compilación (`av`), fuerza la instalación desde el código fuente para que se adapte a tu Raspberry Pi:
 
 ```bash
-pip install --upgrade --force-reinstall --no-binary aiortc aiortc
+pip install --upgrade --force-reinstall --no-binary av,aiortc -r requirements.txt
 ```
 
 ### 4. Prueba de Hardware (Opcional)

@@ -212,9 +212,15 @@ class ClienteVehiculo:
             # 'dshow' o 'foundation' podría ser para Windows/Mac si pruebas local
             format_video = "v4l2"
             device_video = "/dev/video0"
-            # Ajuste Final: Si MJPEG falla, quitamos TODAS las restricciones.
-            # Dejamos que PyAV y la cámara negocien lo que sea que funcione por defecto.
-            opciones = {} 
+            # La cámara en modo legacy solo reporta formatos RAW (YUYV, UYVY, RGB...)
+            # y NO soporta MJPEG/H264 por hardware.
+            # Debemos usar un formato raw soportado y dejar que FFmpeg (libvpx) haga la compresión por software.
+            # UYVY suele ser bien soportado.
+            opciones = {
+                "video_size": "640x480",
+                "framerate": "20",  # Bajamos a 20fps para aliviar CPU
+                "input_format": "uyvy422" # Coincide con [1]: 'UYVY' de tu lista
+            }
 
             if platform.system() == "Windows":
                  logger.warning("Detectado Windows: La cámara puede requerir configuración 'dshow' manual o no funcionar igual que en RPi.")
@@ -226,7 +232,7 @@ class ClienteVehiculo:
                 format_video = "v4l2"
                 device_video = os.getenv("DISPOSITIVO_VIDEO", "/dev/video0")
 
-            logger.info(f"Iniciando cámara con formato: {format_video} en {device_video} (Sin opciones forzadas)")
+            logger.info(f"Iniciando cámara con formato: {format_video} en {device_video} (RAW UYVY)")
             
             self.player = MediaPlayer(device_video, format=format_video, options=opciones)
             self.pc.addTrack(self.player.video)

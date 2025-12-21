@@ -7,7 +7,7 @@ import random
 import platform
 import aiohttp
 from dotenv import load_dotenv
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RTCConfiguration
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RTCConfiguration, RTCIceServer
 from aiortc.sdp import candidate_from_sdp
 from aiortc.contrib.media import MediaPlayer
 import websockets
@@ -188,7 +188,7 @@ class ClienteVehiculo:
         servidor_stun = os.getenv("SERVIDOR_STUN", "stun:stun.l.google.com:19302")
         
         # Lista de Servidores ICE (STUN siempre, TURN si está configurado)
-        ice_servers = [{"urls": [servidor_stun]}]
+        ice_servers = [RTCIceServer(urls=servidor_stun)]
         
         # Verificamos si hay configuración TURN (Crítico para 4G/Entel Chile)
         turn_url = os.getenv("SERVIDOR_TURN_URL")
@@ -197,11 +197,11 @@ class ClienteVehiculo:
         
         if turn_url and turn_user and turn_pass:
             logger.info("Configurando servidor TURN para conexión 4G segura.")
-            ice_servers.append({
-                "urls": [turn_url],
-                "username": turn_user,
-                "credential": turn_pass
-            })
+            ice_servers.append(RTCIceServer(
+                urls=turn_url,
+                username=turn_user,
+                credential=turn_pass
+            ))
 
         config_rtc = RTCConfiguration(iceServers=ice_servers)
         self.pc = RTCPeerConnection(configuration=config_rtc)

@@ -122,41 +122,52 @@ class ClienteVehiculo:
                 await asyncio.sleep(5)
 
     async def manejar_mensaje_señalizacion(self, mensaje):
-        tipo = mensaje.get("type")
-        remitente = mensaje.get("sender")
-        carga = mensaje.get("payload")
+        try:
+            tipo = mensaje.get("type")
+            remitente = mensaje.get("sender")
+            carga = mensaje.get("payload")
 
-        if tipo == "offer":
-            logger.info(f"Recibida oferta WebRTC de {remitente}")
-            await self.crear_peer_connection(remitente)
-            await self.pc.setRemoteDescription(RTCSessionDescription(sdp=carga["sdp"], type=carga["type"]))
-            
-            respuesta = await self.pc.createAnswer()
-            await self.pc.setLocalDescription(respuesta)
-            
-            await self.enviar_señal(remitente, "answer", {
-                "sdp": self.pc.localDescription.sdp, 
-                "type": self.pc.localDescription.type
-            })
-            
-        elif tipo == "pong":
-            # Calcular latencia
-            try:
-                sent_time = float(carga)
-                now = time.time() * 1000
-                self.latencia = now - sent_time
-                logger.debug(f"Latencia actualizada: {self.latencia:.2f} ms")
-            except (ValueError, TypeError):
-                logger.warning("Payload de pong inválido")
+            if tipo == "offer":
+                if not carga or "sdp" not in carga or "type" not in carga:
+                    logger.error(f"Payload de oferta incompleto o inválido: {carga}")
+                    return
 
-        elif tipo == "candidate":
-            if self.pc:
-                candidato = RTCIceCandidate(
-                    candidate=carga["candidate"],
-                    sdpMid=carga["sdpMid"],
-                    sdpMLineIndex=carga["sdpMLineIndex"]
-                )
-                await self.pc.addIceCandidate(candidato)
+                logger.info(f"Recibida oferta WebRTC de {remitente}")
+                await self.crear_peer_connection(remitente)
+                await self.pc.setRemoteDescription(RTCSessionDescription(sdp=carga["sdp"], type=carga["type"]))
+                
+                respuesta = await self.pc.createAnswer()
+                await self.pc.setLocalDescription(respuesta)
+                
+                await self.enviar_señal(remitente, "answer", {
+                    "sdp": self.pc.localDescription.sdp, 
+                    "type": self.pc.localDescription.type
+                })
+                
+            elif tipo == "pong":
+                # Calcular latencia
+                try:
+                    sent_time = float(carga)
+                    now = time.time() * 1000
+                    self.latencia = now - sent_time
+                    logger.debug(f"Latencia actualizada: {self.latencia:.2f} ms")
+                except (ValueError, TypeError):
+                    logger.warning("Payload de pong inválido")
+
+            elif tipo == "candidate":
+                if not carga or "candidate" not in carga or "sdpMid" not in carga or "sdpMLineIndex" not in carga:
+                    logger.error(f"Payload de candidato incompleto: {carga}")
+                    return
+
+                if self.pc:
+                    candidato = RTCIceCandidate(
+                        candidate=carga["candidate"],
+                        sdpMid=carga["sdpMid"],
+                        sdpMLineIndex=carga["sdpMLineIndex"]
+                    )
+                    await self.pc.addIceCandidate(candidato)
+        except Exception as e:
+            logger.error(f"Error procesando mensaje de señalización ({tipo}): {e}")
 
     async def crear_peer_connection(self, peer_id):
         if self.pc:
@@ -203,7 +214,7 @@ class ClienteVehiculo:
             # En Raspberry Pi forzamos v4l2
             if platform.system() == "Linux":
                 format_video = "v4l2"
-                device_video = "/dev/video0"
+                device_video = os.getenv("DISPOSITIVO_VIDEO", "/dev/video0")
 
             logger.info(f"Iniciando cámara con formato: {format_video} en {device_video}")
             
@@ -213,6 +224,8 @@ class ClienteVehiculo:
 
         except Exception as e:
             logger.error(f"Error al iniciar cámara: {e}")
+            if "No such file" in str(e) and "/dev/video" in str(e):
+                logger.warning("Verifique conexión de la cámara. Ejecute 'ls -l /dev/video*' para listar dispositivos.")
             logger.info("Continuando sin video...")
 
         @self.pc.on("datachannel")

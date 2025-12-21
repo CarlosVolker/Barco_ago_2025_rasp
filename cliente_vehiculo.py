@@ -11,6 +11,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RT
 from aiortc.sdp import candidate_from_sdp
 from aiortc.contrib.media import MediaPlayer
 import websockets
+import subprocess
 
 # Importar configuración y controladores genéricos
 from config.credenciales import obtener_identidad, guardar_identidad, eliminar_identidad, TOKEN_VINCULACION
@@ -213,28 +214,37 @@ class ClienteVehiculo:
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con FFmpeg en modo v4l2 RAW (yuyv422)...")
+                    logger.info("Iniciando cámara con estrategia 'libcamera-vid' (Subproceso)...")
                     
-                    # 'yuyv422' es el nombre que usa FFmpeg para el formato 'YUYV' reportado por tu cámara.
-                    opciones = {
-                         "video_size": "640x480",
-                         "framerate": "20",
-                         "pixel_format": "yuyv422" 
-                    }
+                    # Comando para obtener H.264 directo de la cámara (bypassing v4l2 bugs)
+                    cmd = [
+                        "libcamera-vid",
+                        "-t", "0",              # Sin límite de tiempo
+                        "--inline",             # Headers en cada GOP (vital para streaming)
+                        "--width", "640",
+                        "--height", "480",
+                        "--framerate", "20",
+                        "--codec", "h264",
+                        "-o", "-"               # Salida a stdout
+                    ]
                     
-                    device_video = os.getenv("DISPOSITIVO_VIDEO", "/dev/video0")
-                    self.player = MediaPlayer(device_video, format="v4l2", options=opciones)
-                    logger.info(f"Cámara iniciada en {device_video}")
+                    # Iniciamos el proceso
+                    self.cam_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                    
+                    # Pasamos el stdout (pipe) como archivo a MediaPlayer
+                    self.player = MediaPlayer(self.cam_process.stdout, format="h264")
+                    logger.info("Cámara iniciada vía libcamera-vid pipe.")
 
                 except Exception as e:
                     logger.error(f"Error al iniciar cámara: {e}")
-                    raise e
+                    # No relanzamos para que no muera el script, solo avisamos
             else:
                 # Windows
                 self.player = MediaPlayer("video=Integrated Camera", format="dshow", options={})
 
-            self.pc.addTrack(self.player.video)
-            logger.info("Pista de video añadida.")
+            if self.player:
+                self.pc.addTrack(self.player.video)
+                logger.info("Pista de video añadida.")
 
         except Exception as e:
             logger.error(f"Error al iniciar cámara: {e}")

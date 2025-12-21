@@ -49,23 +49,25 @@ Edita `config/componentes.py` para reflejar tu vehículo real:
 nano config/componentes.py
 ```
 
-### 3. Instalación de Dependencias
-#### 3.1 Librerías del Sistema (Raspberry Pi OS)
+### 3. Instalación de Dependencias (Método Seguro Raspberry Pi)
+
+Debido a la dificultad de compilar ciertas librerías de video en la Pi, usaremos **PiWheels** (binarios pre-compilados).
+
+1. **Crear entorno virtual limpio**:
 ```bash
-sudo apt update
-sudo apt install libvpx-dev libopus-dev libffi-dev libssl-dev libavdevice-dev libavfilter-dev libavformat-dev libavcodec-dev libswscale-dev -y
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-#### 3.2 Librerías Python
+2. **Instalar dependencias pesadas desde PiWheels**:
+```bash
+# Importante: --only-binary fuerza el uso de versiones pre-compiladas
+pip install aiortc --only-binary=:all: --index-url https://www.piwheels.org/simple --extra-index-url https://pypi.org/simple
+```
+
+3. **Instalar el resto**:
 ```bash
 pip install -r requirements.txt
-```
-
-#### 3.3 Solución de Problemas Comunes (ImportError: libvpx)
-Si recibes errores de librerías (`libvpx`, `libffi`) o de compilación (`av`), fuerza la instalación desde el código fuente para que se adapte a tu Raspberry Pi:
-
-```bash
-pip install --upgrade --force-reinstall --no-binary av,aiortc -r requirements.txt
 ```
 
 ### 4. Prueba de Hardware (Opcional)

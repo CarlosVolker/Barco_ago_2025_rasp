@@ -207,39 +207,27 @@ class ClienteVehiculo:
         self.pc = RTCPeerConnection(configuration=config_rtc)
         
         try:
-            # ESTRATEGIA DEFINITIVA: "libcamera-vid" via pipe
-            # Ya que v4l2 directo da Errno 22 (probablemente por conflicto de pixel format en libavdevice),
-            # usaremos el comando nativo de RPi para generar H.264 y lo leeremos por pipe.
+            # ESTRATEGIA: Uso directo de v4l2 con formato RAW explícito
+            # El comando libcamera-vid falló porque MediaPlayer no acepta comandos string directos, solo files.
+            # Volvemos al plan de usar FFmpeg nativo con el formato exacto que reportó v4l2-ctl.
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara usando 'libcamera-vid' (PIPE)...")
-                    # --inline: headers en cada Keyframe (vital para streaming)
-                    # -t 0: tiempo infinito
-                    # --codec h264: codificación por hardware
-                    # -o -: salida a stdout
-                    cmd_cam = "libcamera-vid --inline -t 0 --width 640 --height 480 --framerate 20 --codec h264 -o -"
+                    logger.info("Iniciando cámara con FFmpeg en modo v4l2 RAW (yuyv422)...")
                     
-                    # MediaPlayer acepta un objeto 'file-like' o un string de path.
-                    # Para pipe, usamos el formato "h264" si le pasamos stdin.
-                    self.player = MediaPlayer(cmd_cam, format="h264") # PyAV maneja el subprocess internamente si es un string de comando? NO.
-                    
-                    # CORRECCIÓN: Para aiortc <= 1.5, MediaPlayer no abre subprocess por sí solo de forma robusta con pipes complejos.
-                    # Usaremos la forma específica: pasarle un diccionario de opciones para abrirlo como input.
-                    # Si 'file' es un comando, suele requerir ajustar librerías.
-                    # MÁS SIMPLE: Usar /dev/video0 pero con FFmpeg forzado a usar v4l2 con formato raw específico.
-                    
-                    # Opción B (la que aplicaremos): Forzar a MediaPlayer a usar ffmpeg con parámetros raw explícitos de entrada.
+                    # 'yuyv422' es el nombre que usa FFmpeg para el formato 'YUYV' reportado por tu cámara.
                     opciones = {
                          "video_size": "640x480",
                          "framerate": "20",
-                         "pixel_format": "yuyv422" # Nombre de FFmpeg para YUYV (el [0] de tu lista)
+                         "pixel_format": "yuyv422" 
                     }
-                    self.player = MediaPlayer("/dev/video0", format="v4l2", options=opciones)
-                    logger.info("Intento con pixel_format='yuyv422' explícito para FFmpeg.")
+                    
+                    device_video = os.getenv("DISPOSITIVO_VIDEO", "/dev/video0")
+                    self.player = MediaPlayer(device_video, format="v4l2", options=opciones)
+                    logger.info(f"Cámara iniciada en {device_video}")
 
                 except Exception as e:
-                    logger.error(f"Falla estrategia B: {e}")
+                    logger.error(f"Error al iniciar cámara: {e}")
                     raise e
             else:
                 # Windows

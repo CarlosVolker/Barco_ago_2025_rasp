@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+import time
+import random
 import platform
 import aiohttp
 from dotenv import load_dotenv
@@ -36,6 +38,7 @@ class ClienteVehiculo:
         self.token = identidad.get("token") if identidad else None
         self.canal_datos = None
         self.ejecutando = True
+        self.latencia = 0  # Latencia en ms
 
     async def registrar_si_es_necesario(self):
         """
@@ -125,6 +128,16 @@ class ClienteVehiculo:
                 "type": self.pc.localDescription.type
             })
             
+        elif tipo == "pong":
+            # Calcular latencia
+            try:
+                sent_time = float(carga)
+                now = time.time() * 1000
+                self.latencia = now - sent_time
+                logger.debug(f"Latencia actualizada: {self.latencia:.2f} ms")
+            except (ValueError, TypeError):
+                logger.warning("Payload de pong inválido")
+
         elif tipo == "candidate":
             if self.pc:
                 candidato = RTCIceCandidate(
@@ -249,6 +262,21 @@ class ClienteVehiculo:
         except Exception as e:
             logger.error(f"Error procesando comando: {e}")
 
+    async def bucle_ping(self):
+        """
+        Envía pings periódicos para medir latencia.
+        """
+        while self.ejecutando:
+            if self.ws and self.ws.open:
+                now = time.time() * 1000  # ms
+                try:
+                    await self.enviar_señal(None, "ping", now)
+                except Exception as e:
+                    logger.debug(f"Error enviando ping: {e}")
+            
+            # Espera aleatoria entre 2 y 5 segundos
+            await asyncio.sleep(random.uniform(2, 5))
+
     async def bucle_telemetria(self):
         """
         Envía parámetros al backend periódicamente.
@@ -264,7 +292,8 @@ class ClienteVehiculo:
                     "bateria": 12.5,
                     "latitud": -33.4489,
                     "longitud": -70.6693,
-                    "intensidad_señal": -65
+                    "intensidad_señal": -65,
+                    "latencia": int(self.latencia)
                 }
                 
                 try:
@@ -289,7 +318,8 @@ class ClienteVehiculo:
         if await self.registrar_si_es_necesario():
             await asyncio.gather(
                 self.conectar_signaling(),
-                self.bucle_telemetria()
+                self.bucle_telemetria(),
+                self.bucle_ping()
             )
 
 if __name__ == "__main__":

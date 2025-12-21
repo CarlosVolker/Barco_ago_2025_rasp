@@ -46,6 +46,8 @@ El proyecto abandona las claves estáticas (hardcoded) un modelo de **Identidad 
     *   `token_secreto`: API Key de largo plazo (ej. `sk_live_...`).
 5.  **Persistencia**: El script guarda estos datos cifrados y borra el token de vinculación de la memoria.
 
+> **Nota**: Actualmente el sistema mantiene el almacenamiento encriptado descrito, aunque se planea una migración futura a un esquema simplificado basado en variables de entorno.
+
 ---
 
 ## 3. Protocolos de Comunicación
@@ -74,6 +76,16 @@ El sistema soporta configuración de servidor **TURN** (Traversal Using Relays a
 *   **Seguridad**: WSS (TLS 1.2+).
 *   **Rol**: Intercambio de ofertas SDP (Session Description Protocol) y candidatos ICE.
 *   **Autenticación**: Vía Query Param `?token={token_secreto}`.
+
+### C. Latencia y Telemetría
+*   **Medición de Latencia (Ping/Pong)**:
+    *   El cliente envía mensajes `{"type": "ping", "payload": timestamp}` vía WebSocket cada 2-5 segundos.
+    *   El backend responde con `pong` y el mismo payload.
+    *   La diferencia de tiempo se calcula como latencia de red (RTT).
+*   **Reporte de Telemetría**:
+    *   Endpoint: `POST /api/vehiculos/telemetria/`
+    *   Frecuencia: Cada 10 segundos.
+    *   Datos: `bateria`, `latitud`, `longitud`, `intensidad_señal`, y ahora incluye **`latencia`**.
 
 ---
 

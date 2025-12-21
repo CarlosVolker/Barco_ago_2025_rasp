@@ -49,24 +49,39 @@ Edita `config/componentes.py` para reflejar tu vehículo real:
 nano config/componentes.py
 ```
 
-### 3. Instalación de Dependencias (Método Seguro Raspberry Pi)
+### 3. Instalación de Dependencias (Método "Frankenstein" - Probado en Bookworm)
+Debido a conflictos entre versiones modernas de `av` y `aiortc` en Raspberry Pi, se requiere este procedimiento exacto:
 
-Debido a la dificultad de compilar ciertas librerías de video en la Pi, usaremos **PiWheels** (binarios pre-compilados).
-
-1. **Crear entorno virtual limpio**:
+1. **Instalar dependencias del sistema**:
 ```bash
-python3 -m venv .venv
+sudo apt update
+sudo apt install libsrtp2-dev python3-av python3-openssl -y
+```
+
+2. **Crear entorno virtual conectado al sistema**:
+```bash
+python3 -m venv .venv --system-site-packages
 source .venv/bin/activate
 ```
 
-2. **Instalar dependencias pesadas desde PiWheels**:
+3. **Vincular librerías del sistema ("El Puente")**:
 ```bash
-# Importante: --only-binary fuerza el uso de versiones pre-compiladas
-pip install aiortc --only-binary=:all: --index-url https://www.piwheels.org/simple --extra-index-url https://pypi.org/simple
+echo "/usr/lib/python3/dist-packages" > .venv/lib/python3.11/site-packages/system_libs.pth
 ```
 
-3. **Instalar el resto**:
+4. **Instalar dependencias manualmente**:
 ```bash
+# 1. Dependencias ligeras
+pip install aioice google-crc32c pyee pylibsrtp cryptography netifaces
+
+# 2. aiortc (Sin compilar deps, usando av del sistema)
+pip install aiortc --no-binary aiortc --no-deps
+
+# 3. Parche de Compatibilidad (Vital para AV v12+)
+python fix_compatibility.py
+
+# 4. Actualizar OpenSSL y resto de librerías
+pip install pyopenssl --upgrade
 pip install -r requirements.txt
 ```
 

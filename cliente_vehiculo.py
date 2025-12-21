@@ -292,7 +292,7 @@ class ClienteVehiculo:
                     "bateria": 12.5,
                     "latitud": -33.4489,
                     "longitud": -70.6693,
-                    "intensidad_señal": -65,
+                    "intensidad_señal": self.obtener_nivel_senal(),
                     "latencia": int(self.latencia)
                 }
                 
@@ -305,6 +305,40 @@ class ClienteVehiculo:
                     logger.error(f"Falla en envío de telemetría: {e}")
             
             await asyncio.sleep(10)
+
+    def obtener_nivel_senal(self):
+        """
+        Obtiene la intensidad de la señal (dBm) desde el sistema.
+        Funciona principalmente para Wi-Fi en Linux.
+        """
+        # Valor por defecto si falla la lectura
+        default_dbm = -100
+
+        if platform.system() != "Linux":
+            return -70  # Simulación para Windows/Mac
+
+        try:
+            # Intento leer /proc/net/wireless (Estándar para Wi-Fi)
+            with open("/proc/net/wireless", "r") as f:
+                lines = f.readlines()
+                # El formato suele tener cabeceras en las 2 primeras líneas
+                for line in lines[2:]:
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        # parts[0] es la interfaz (ej: mlan0:)
+                        # parts[2] es link quality
+                        # parts[3] es level (dBm) - a veces tiene un punto al final (ej: -65.)
+                        
+                        # Buscamos la interfaz wlan0 o similar
+                        if "wlan" in parts[0] or "mlan" in parts[0]:
+                            raw_dbm = parts[3].replace(".", "")
+                            return int(raw_dbm)
+        except Exception:
+            pass
+            
+        # TODO: Implementar lectura para modem celular 4G (AT commands o nmcli)
+        # O usar librerías como 'python-networkmanager' si se usa NetworkManager
+        return default_dbm
 
     async def enviar_señal(self, destino, tipo, carga):
         if self.ws:

@@ -4,8 +4,7 @@ import sys
 
 def patch_aiortc():
     """
-    Parches aiortc files to Replace AudioCodecContext/VideoCodecContext with CodecContext
-    Compatible with PyAV v12+
+    Parches aiortc files to Fix Import Paths
     """
     # 1. Locate aiortc
     aiortc_path = None
@@ -13,7 +12,6 @@ def patch_aiortc():
         import aiortc
         aiortc_path = os.path.dirname(aiortc.__file__)
     except ImportError:
-        # Try site packages if import fails (shouldn't happen in venv)
         for p in site.getsitepackages():
             candidate = os.path.join(p, "aiortc")
             if os.path.exists(candidate):
@@ -26,11 +24,15 @@ def patch_aiortc():
 
     print(f"📍 Found aiortc at: {aiortc_path}")
 
-    # 2. Patch files
+    # 2. Patch paths
     count = 0
     replacements = {
-        "AudioCodecContext": "CodecContext",
-        "VideoCodecContext": "CodecContext"
+        # Fix paths where CodecContext lives now
+        "from av.video.codeccontext": "from av.codec.context",
+        "from av.audio.codeccontext": "from av.codec.context",
+        # Ensure imports point to the correct submodules
+        "import av.video.codeccontext": "import av.codec.context",
+        "import av.audio.codeccontext": "import av.codec.context"
     }
 
     for root, dirs, files in os.walk(aiortc_path):
@@ -44,22 +46,19 @@ def patch_aiortc():
                 changed = False
                 for src, dst in replacements.items():
                     if src in new_data:
-                        # Simple string replacement handles both imports and usage
-                        # "from av import AudioCodecContext" -> "from av import CodecContext"
-                        # "ctx = AudioCodecContext()" -> "ctx = CodecContext()"
                         new_data = new_data.replace(src, dst)
                         changed = True
                 
                 if changed:
-                    print(f"🔧 Patching {name}...")
+                    print(f"🔧 Patching imports in {name}...")
                     with open(path, "w", encoding="utf-8") as f:
                         f.write(new_data)
                     count += 1
     
     if count > 0:
-        print(f"✅ Success! Patched {count} files.")
+        print(f"✅ Success! Updated imports in {count} files.")
     else:
-        print("⚠️ No patches needed or files not found.")
+        print("⚠️ No more path replacements needed (or files already patched).")
 
 if __name__ == "__main__":
     patch_aiortc()

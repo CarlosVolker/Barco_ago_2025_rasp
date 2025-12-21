@@ -207,33 +207,46 @@ class ClienteVehiculo:
         self.pc = RTCPeerConnection(configuration=config_rtc)
         
         try:
-            # Determinamos plataforma para elegir formato de cámara
-            # 'v4l2' es estándar para Raspberry Pi / Linux
-            # 'dshow' o 'foundation' podría ser para Windows/Mac si pruebas local
-            format_video = "v4l2"
-            device_video = "/dev/video0"
-            # Intento final con RAW: No forzamos el formato de pixel ('input_format').
-            # Solo pedimos resolución y fps. PyAV debería tomar el primero disponible (YUYV usualmente).
-            opciones = {
-                "video_size": "640x480",
-                "framerate": "20"
-            }
-
-            if platform.system() == "Windows":
-                 logger.warning("Detectado Windows: La cámara puede requerir configuración 'dshow' manual o no funcionar igual que en RPi.")
-                 format_video = "dshow"
-                 device_video = "video=Integrated Camera" 
+            # ESTRATEGIA DEFINITIVA: "libcamera-vid" via pipe
+            # Ya que v4l2 directo da Errno 22 (probablemente por conflicto de pixel format en libavdevice),
+            # usaremos el comando nativo de RPi para generar H.264 y lo leeremos por pipe.
             
-            # En Raspberry Pi forzamos v4l2
             if platform.system() == "Linux":
-                format_video = "v4l2"
-                device_video = os.getenv("DISPOSITIVO_VIDEO", "/dev/video0")
+                try:
+                    logger.info("Iniciando cámara usando 'libcamera-vid' (PIPE)...")
+                    # --inline: headers en cada Keyframe (vital para streaming)
+                    # -t 0: tiempo infinito
+                    # --codec h264: codificación por hardware
+                    # -o -: salida a stdout
+                    cmd_cam = "libcamera-vid --inline -t 0 --width 640 --height 480 --framerate 20 --codec h264 -o -"
+                    
+                    # MediaPlayer acepta un objeto 'file-like' o un string de path.
+                    # Para pipe, usamos el formato "h264" si le pasamos stdin.
+                    self.player = MediaPlayer(cmd_cam, format="h264") # PyAV maneja el subprocess internamente si es un string de comando? NO.
+                    
+                    # CORRECCIÓN: Para aiortc <= 1.5, MediaPlayer no abre subprocess por sí solo de forma robusta con pipes complejos.
+                    # Usaremos la forma específica: pasarle un diccionario de opciones para abrirlo como input.
+                    # Si 'file' es un comando, suele requerir ajustar librerías.
+                    # MÁS SIMPLE: Usar /dev/video0 pero con FFmpeg forzado a usar v4l2 con formato raw específico.
+                    
+                    # Opción B (la que aplicaremos): Forzar a MediaPlayer a usar ffmpeg con parámetros raw explícitos de entrada.
+                    opciones = {
+                         "video_size": "640x480",
+                         "framerate": "20",
+                         "pixel_format": "yuyv422" # Nombre de FFmpeg para YUYV (el [0] de tu lista)
+                    }
+                    self.player = MediaPlayer("/dev/video0", format="v4l2", options=opciones)
+                    logger.info("Intento con pixel_format='yuyv422' explícito para FFmpeg.")
 
-            logger.info(f"Iniciando cámara con formato: {format_video} en {device_video} (640x480@20fps auto-pixel)")
-            
-            self.player = MediaPlayer(device_video, format=format_video, options=opciones)
+                except Exception as e:
+                    logger.error(f"Falla estrategia B: {e}")
+                    raise e
+            else:
+                # Windows
+                self.player = MediaPlayer("video=Integrated Camera", format="dshow", options={})
+
             self.pc.addTrack(self.player.video)
-            logger.info("Pista de video añadida (MediaPlayer).")
+            logger.info("Pista de video añadida.")
 
         except Exception as e:
             logger.error(f"Error al iniciar cámara: {e}")

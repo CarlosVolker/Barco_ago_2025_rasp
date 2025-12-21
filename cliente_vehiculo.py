@@ -7,7 +7,8 @@ import random
 import platform
 import aiohttp
 from dotenv import load_dotenv
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RTCConfiguration
+from aiortc.sdp import candidate_from_sdp
 from aiortc.contrib.media import MediaPlayer
 import websockets
 
@@ -162,12 +163,19 @@ class ClienteVehiculo:
                     return
 
                 if self.pc:
-                    candidato = RTCIceCandidate(
-                        candidate=carga["candidate"],
-                        sdpMid=carga["sdpMid"],
-                        sdpMLineIndex=carga["sdpMLineIndex"]
-                    )
-                    await self.pc.addIceCandidate(candidato)
+                    # Usamos candidate_from_sdp para parsear el string 'candidate:...'
+                    candidate_str = carga["candidate"]
+                    # Corrección: si el string es solo "candidate:...", aiortc lo parsa.
+                    # Pero a veces el string raw puede venir sin el prefijo "candidate:".
+                    # El standard dice que el atributo 'candidate' contiene el string completo SDP.
+                    
+                    try:
+                        candidato = candidate_from_sdp(candidate_str)
+                        candidato.sdpMid = carga.get("sdpMid")
+                        candidato.sdpMLineIndex = carga.get("sdpMLineIndex")
+                        await self.pc.addIceCandidate(candidato)
+                    except Exception as e_cand:
+                        logger.error(f"Error parseando candidato ICE: {e_cand}")
         except Exception as e:
             logger.error(f"Error procesando mensaje de señalización ({tipo}): {e}")
 
@@ -195,7 +203,7 @@ class ClienteVehiculo:
                 "credential": turn_pass
             })
 
-        config_rtc = {"iceServers": ice_servers}
+        config_rtc = RTCConfiguration(iceServers=ice_servers)
         self.pc = RTCPeerConnection(configuration=config_rtc)
         
         try:

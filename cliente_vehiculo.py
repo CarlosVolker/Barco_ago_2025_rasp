@@ -12,7 +12,7 @@ from aiortc.contrib.media import MediaPlayer
 import websockets
 
 # Importar configuración y controladores genéricos
-from config.credenciales import obtener_identidad, guardar_identidad, TOKEN_VINCULACION
+from config.credenciales import obtener_identidad, guardar_identidad, eliminar_identidad, TOKEN_VINCULACION
 from controladores.instancias import motores, servos_direccion, actuadores_multieje
 from config.componentes import MOTORES_PROPULSION, SERVOS_DIRECCION, ACTUADORES_MULTIEJE
 
@@ -106,6 +106,17 @@ class ClienteVehiculo:
                     async for mensaje in websocket:
                         datos = json.loads(mensaje)
                         await self.manejar_mensaje_señalizacion(datos)
+            
+            except websockets.exceptions.InvalidStatusCode as e:
+                if e.status_code in [401, 403]:
+                    logger.critical("Acceso denegado (401/403) en WebSocket. Credenciales revocadas.")
+                    eliminar_identidad()
+                    self.ejecutando = False
+                    break
+                else:
+                     logger.warning(f"Error HTTP en WebSocket: {e.status_code}. Reintentando...")
+                     await asyncio.sleep(5)
+
             except Exception as e:
                 logger.warning(f"Conexión de señalización perdida: {e}. Reintentando en 5 segundos...")
                 await asyncio.sleep(5)
@@ -299,7 +310,14 @@ class ClienteVehiculo:
                 try:
                     async with aiohttp.ClientSession() as session:
                         async with session.post(url, json=datos_telemetria, headers=headers) as resp:
-                            if resp.status != 200:
+                            if resp.status == 200:
+                                pass # Todo OK
+                            elif resp.status in [401, 403]:
+                                logger.critical(f"Telemetría Rechazada ({resp.status}). Revocando identidad local...")
+                                eliminar_identidad()
+                                self.ejecutando = False
+                                break
+                            else:
                                 logger.warning(f"Error enviando telemetría: {resp.status}")
                 except Exception as e:
                     logger.error(f"Falla en envío de telemetría: {e}")

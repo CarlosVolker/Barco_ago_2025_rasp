@@ -212,13 +212,9 @@ class ClienteVehiculo:
             # 'dshow' o 'foundation' podría ser para Windows/Mac si pruebas local
             format_video = "v4l2"
             device_video = "/dev/video0"
-            # Ajuste de opciones: A veces forzar resolución causa Errno 22 si la cámara no lo soporta exacto.
-            # Probamos una configuración más flexible.
-            opciones = {
-                "video_size": "640x480", 
-                "framerate": "30",
-                "input_format": "mjpeg" # Forzar MJPEG suele ser más compatible con v4l2 en RPi
-            }
+            # Ajuste Final: Si MJPEG falla, quitamos TODAS las restricciones.
+            # Dejamos que PyAV y la cámara negocien lo que sea que funcione por defecto.
+            opciones = {} 
 
             if platform.system() == "Windows":
                  logger.warning("Detectado Windows: La cámara puede requerir configuración 'dshow' manual o no funcionar igual que en RPi.")
@@ -230,7 +226,7 @@ class ClienteVehiculo:
                 format_video = "v4l2"
                 device_video = os.getenv("DISPOSITIVO_VIDEO", "/dev/video0")
 
-            logger.info(f"Iniciando cámara con formato: {format_video} en {device_video}")
+            logger.info(f"Iniciando cámara con formato: {format_video} en {device_video} (Sin opciones forzadas)")
             
             self.player = MediaPlayer(device_video, format=format_video, options=opciones)
             self.pc.addTrack(self.player.video)

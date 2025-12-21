@@ -212,14 +212,18 @@ class ClienteVehiculo:
             # 'dshow' o 'foundation' podría ser para Windows/Mac si pruebas local
             format_video = "v4l2"
             device_video = "/dev/video0"
-            opciones = {"video_size": "640x480", "framerate": "30"}
+            # Ajuste de opciones: A veces forzar resolución causa Errno 22 si la cámara no lo soporta exacto.
+            # Probamos una configuración más flexible.
+            opciones = {
+                "video_size": "640x480", 
+                "framerate": "30",
+                "input_format": "mjpeg" # Forzar MJPEG suele ser más compatible con v4l2 en RPi
+            }
 
             if platform.system() == "Windows":
                  logger.warning("Detectado Windows: La cámara puede requerir configuración 'dshow' manual o no funcionar igual que en RPi.")
                  format_video = "dshow"
-                 device_video = "video=Integrated Camera" # Ajustar según nombre real de cámara en Windows
-                 # Fallback simple si no estamos seguros del nombre en Windows:
-                 # Se intentará, pero es probable que falle si el nombre no coincide.
+                 device_video = "video=Integrated Camera" 
             
             # En Raspberry Pi forzamos v4l2
             if platform.system() == "Linux":

@@ -128,13 +128,15 @@ class ClienteVehiculo:
             carga = mensaje.get("payload")
 
             if tipo == "offer":
-                if not carga or "sdp" not in carga or "type" not in carga:
+                if not carga or "sdp" not in carga:
                     logger.error(f"Payload de oferta incompleto o inválido: {carga}")
                     return
 
                 logger.info(f"Recibida oferta WebRTC de {remitente}")
                 await self.crear_peer_connection(remitente)
-                await self.pc.setRemoteDescription(RTCSessionDescription(sdp=carga["sdp"], type=carga["type"]))
+                # Si 'type' no viene en el payload, usamos 'offer' (que es el valor de 'tipo')
+                sdp_type = carga.get("type", tipo)
+                await self.pc.setRemoteDescription(RTCSessionDescription(sdp=carga["sdp"], type=sdp_type))
                 
                 respuesta = await self.pc.createAnswer()
                 await self.pc.setLocalDescription(respuesta)

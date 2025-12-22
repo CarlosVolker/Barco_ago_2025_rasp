@@ -196,10 +196,12 @@ class ClienteVehiculo:
         """
         Detiene la cámara, cierra WebRTC y para motores de forma segura.
         """
-        # 1. Parar Motores (Seguridad)
+        # 1. Motores a Neutro (Standby)
+        # NO usar motor.detener() porque mata el PWM y causa pitidos de error en el ESC
         try:
             for motor in motores: 
-                motor.detener()
+                logger.info(f"Poniendo motor {motor.nombre} en Standby (0)...")
+                motor.establecer_velocidad(0)
         except: pass
         
         # 2. Cerrar WebRTC

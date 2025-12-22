@@ -342,6 +342,20 @@ class ClienteVehiculo:
             # Espera aleatoria entre 2 y 5 segundos
             await asyncio.sleep(random.uniform(2, 5))
 
+    def obtener_temperatura_cpu(self):
+        """
+        Lee la temperatura del CPU desde el sistema de archivos (estándar Linux).
+        Devuelve float en grados Celsius.
+        """
+        try:
+            # Método estándar en Raspberry Pi OS
+            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                temp_raw = f.read().strip()
+                return float(temp_raw) / 1000.0
+        except Exception:
+            # Fallback simulado para Windows o errores
+            return 0.0
+
     async def bucle_telemetria(self):
         """
         Envía parámetros al backend periódicamente.
@@ -358,6 +372,7 @@ class ClienteVehiculo:
                     "latitud": -33.4489,
                     "longitud": -70.6693,
                     "intensidad_señal": self.obtener_nivel_senal(),
+                    "temperatura_cpu": self.obtener_temperatura_cpu(),
                     "latencia": int(self.latencia)
                 }
                 

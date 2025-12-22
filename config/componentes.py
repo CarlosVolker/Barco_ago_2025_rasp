@@ -28,7 +28,7 @@ INSTRUCCIONES PARA AÑADIR ELEMENTOS:
 
 MOTORES_PROPULSION = [
     # Ejemplo Barco: 1 solo motor principal
-    {"nombre": "motor_principal", "pin_pwm": 18},
+    {"nombre": "motor_principal", "pin_pwm": 11},
     
     # Ejemplo Tanque (Descomentar para usar):
     # {"nombre": "oruga_izquierda", "pin_pwm": 18},
@@ -86,7 +86,7 @@ ACTUADORES_MULTIEJE = [
     # TORRETA 1 (Ejemplo de personalización independiente)
     {
         "nombre": "torreta_proa",
-        "canales": {"giro": 4, "elevacion": 5},
+        "canales": {"giro": 6, "elevacion": 7},
         "limites": {
             "giro": (0, 180),      # Esta torreta gira completo
             "elevacion": (0, 45)   # Solo eleva un poco
@@ -96,15 +96,15 @@ ACTUADORES_MULTIEJE = [
 
     # TORRETA 2 (Ejemplo con límites distintos)
     # Esta torreta podría estar bloqueada por una estructura, así que limitamos su giro.
-    {
-        "nombre": "torreta_popa",
-        "canales": {"giro": 6, "elevacion": 7},
-        "limites": {
-            "giro": (60, 120),     # GIRO RESTRINGIDO
-            "elevacion": (0, 45)
-        },
-        "pin_accion": 23
-    }
+    # {
+    #     "nombre": "torreta_popa",
+    #     "canales": {"giro": 6, "elevacion": 7},
+    #     "limites": {
+    #         "giro": (60, 120),     # GIRO RESTRINGIDO
+    #         "elevacion": (0, 45)
+    #     },
+    #     "pin_accion": 23
+    # }
 ]
 
 # -----------------------------------------------------------------------------

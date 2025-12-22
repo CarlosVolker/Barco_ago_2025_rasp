@@ -214,36 +214,42 @@ class ClienteVehiculo:
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (OV5647 Native Mode)...")
+                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (Ultra Low Latency)...")
                     
-                    # Configuración NATIVA OV5647 (1296x972 - 4:3)
-                    # - Usa el modo binning 2x2. Full FOV (Gran Angular 175° real).
-                    # - Bitrate 6 Mbps: Calidad cristalina para WiFi fuerte.
+                    # Configuración NATIVA OV5647 (1296x972) + Optimización de Latencia
+                    # --low-latency 1: Preset para minimizar retardo en libav
+                    # --g 5: Keyframe cada 5 frames (recuperación rápida)
+                    # --flush: Enviar paquetes inmediatamente
                     cmd = [
                         "rpicam-vid",
                         "-t", "0",
                         "--inline",
-                        "--width", "1296",      # Ancho Nativo 2x2
-                        "--height", "972",      # Alto Nativo 2x2
+                        "--width", "1296",
+                        "--height", "972",
                         "--framerate", "30",
-                        "--bitrate", "6000000", # 6 Mbps (Super Alta Calidad)
+                        "--bitrate", "6000000",
                         "--profile", "high",
                         "--codec", "libav",
                         "--libav-format", "mpegts",
+                        "--low-latency", "1",   # NUEVO: Mode baja latencia
+                        "--g", "5",             # NUEVO: GOP corto
+                        "--flush",              # NUEVO: Sin buffer salida
                         "-o", "-"
                     ]
                     
                     # Iniciamos el proceso
                     self.cam_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                     
-                    # Configuramos MediaPlayer para leer MPEG-TS.
-                    # 'probesize' y 'analyze_duration' bajos reducen el tiempo de "buffering" inicial.
+                    # Configuramos MediaPlayer para latencia cero.
+                    # 'fflags: nobuffer' es crítico para streams en vivo.
                     opciones_ffmpeg = {
                         "probesize": "32", 
-                        "analyze_duration": "0"
+                        "analyze_duration": "0",
+                        "fflags": "nobuffer",   # CRÍTICO
+                        "flags": "low_delay"    # CRÍTICO
                     }
                     self.player = MediaPlayer(self.cam_process.stdout, format="mpegts", options=opciones_ffmpeg)
-                    logger.info("Cámara iniciada vía rpicam-vid (MPEG-TS).")
+                    logger.info("Cámara iniciada vía rpicam-vid (Ultra Low Latency).")
 
                 except Exception as e:
                     logger.error(f"Error al iniciar cámara: {e}")

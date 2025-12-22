@@ -46,8 +46,8 @@ SERVOS_DIRECCION = [
     {
         "nombre": "timon_central", 
         "canal": 0, 
-        "angulo_min": 45,  # Límite izquierdo físico
-        "angulo_max": 135  # Límite derecho físico
+        "angulo_min": 0,  # Límite izquierdo físico
+        "angulo_max": 180  # Límite derecho físico
     },
     
     # Ejemplo Auto (Descomentar):

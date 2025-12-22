@@ -147,7 +147,11 @@ class ClienteVehiculo:
                     "sdp": self.pc.localDescription.sdp, 
                     "type": self.pc.localDescription.type
                 })
-                
+            
+            elif tipo == "finalizar_conexion":
+                logger.info("Solicitud de desconexión recibida. Liberando recursos...")
+                await self.liberar_recursos()
+
             elif tipo == "pong":
                 # Calcular latencia
                 try:
@@ -177,8 +181,46 @@ class ClienteVehiculo:
                         await self.pc.addIceCandidate(candidato)
                     except Exception as e_cand:
                         logger.error(f"Error parseando candidato ICE: {e_cand}")
+            
+            elif tipo == "control":
+                # IMPORTANTE: El frontend envía comandos por WS si WebRTC data no está listo
+                if carga:
+                    # Parseamos si viene como string JSON, si no, usamos el dict directo
+                    # A veces la carga ya es el dict
+                    self.procesar_comando_control(json.dumps(carga) if isinstance(carga, dict) else carga)
+
         except Exception as e:
             logger.error(f"Error procesando mensaje de señalización ({tipo}): {e}")
+
+    async def liberar_recursos(self):
+        """
+        Detiene la cámara, cierra WebRTC y para motores de forma segura.
+        """
+        # 1. Parar Motores (Seguridad)
+        try:
+            for motor in motores: 
+                motor.detener()
+        except: pass
+        
+        # 2. Cerrar WebRTC
+        if self.pc:
+            logger.info("Cerrando conexión WebRTC...")
+            await self.pc.close()
+            self.pc = None
+
+        # 3. Matar proceso de cámara (rpicam-vid)
+        # Es crítico matarlo para liberar /dev/video0
+        if hasattr(self, 'cam_process') and self.cam_process:
+            logger.info("Terminando proceso de cámara...")
+            self.cam_process.terminate()
+            try:
+                self.cam_process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                logger.warning("La cámara no se cerró a tiempo, forzando kill...")
+                self.cam_process.kill()
+            self.cam_process = None
+            
+        logger.info("Recursos liberados correctamente.")
 
     async def crear_peer_connection(self, peer_id):
         if self.pc:

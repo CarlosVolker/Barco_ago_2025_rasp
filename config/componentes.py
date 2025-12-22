@@ -79,7 +79,7 @@ ACTUADORES_MULTIEJE = [
             # El eje horizontal suele tener más recorrido (ej. 0 a 180 grados)
             "pan": (0, 180),
             # El eje vertical suele estar más restringido (ej. 45 a 90 grados) para no mirar el techo
-            "tilt": (45, 135)
+            "tilt": (0, 180)
         }
     },
 

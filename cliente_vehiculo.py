@@ -233,7 +233,10 @@ class ClienteVehiculo:
                     self.cam_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                     
                     # Pasamos el stdout (pipe) como archivo a MediaPlayer
-                    self.player = MediaPlayer(self.cam_process.stdout, format="h264")
+                    # IMPORTANTE: Definimos 'framerate' en las opciones para que FFmpeg calcule los PTS
+                    # ya que el stream H.264 raw por pipe no tiene esa metadata de tiempo.
+                    opciones_ffmpeg = {"framerate": "20"} 
+                    self.player = MediaPlayer(self.cam_process.stdout, format="h264", options=opciones_ffmpeg)
                     logger.info("Cámara iniciada vía rpicam-vid pipe.")
 
                 except Exception as e:

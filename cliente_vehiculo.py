@@ -214,30 +214,33 @@ class ClienteVehiculo:
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (Subproceso)...")
+                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (MPEG-TS)...")
                     
-                    # Comando para obtener H.264 directo de la cámara (bypassing v4l2 bugs)
-                    # En Raspberry Pi OS Bookworm, el comando es 'rpicam-vid' en lugar de 'libcamera-vid'
+                    # Usamos 'libav' para empaquetar en MPEG-TS, que SÍ incluye timestamps (PTS/DTS)
+                    # Esto evita las advertencias de 'Skipping video frame with no pts'.
                     cmd = [
                         "rpicam-vid",
-                        "-t", "0",              # Sin límite de tiempo
-                        "--inline",             # Headers en cada GOP (vital para streaming)
+                        "-t", "0",
+                        "--inline",
                         "--width", "640",
                         "--height", "480",
                         "--framerate", "20",
-                        "--codec", "h264",
-                        "-o", "-"               # Salida a stdout
+                        "--codec", "libav",         # Usar backend libav
+                        "--libav-format", "mpegts",  # Formato contenedor transporte (streamable)
+                        "-o", "-"
                     ]
                     
                     # Iniciamos el proceso
                     self.cam_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                     
-                    # Pasamos el stdout (pipe) como archivo a MediaPlayer
-                    # IMPORTANTE: Definimos 'framerate' en las opciones para que FFmpeg calcule los PTS
-                    # ya que el stream H.264 raw por pipe no tiene esa metadata de tiempo.
-                    opciones_ffmpeg = {"framerate": "20"} 
-                    self.player = MediaPlayer(self.cam_process.stdout, format="h264", options=opciones_ffmpeg)
-                    logger.info("Cámara iniciada vía rpicam-vid pipe.")
+                    # Configuramos MediaPlayer para leer MPEG-TS.
+                    # 'probesize' y 'analyze_duration' bajos reducen el tiempo de "buffering" inicial.
+                    opciones_ffmpeg = {
+                        "probesize": "32", 
+                        "analyze_duration": "0"
+                    }
+                    self.player = MediaPlayer(self.cam_process.stdout, format="mpegts", options=opciones_ffmpeg)
+                    logger.info("Cámara iniciada vía rpicam-vid (MPEG-TS).")
 
                 except Exception as e:
                     logger.error(f"Error al iniciar cámara: {e}")

@@ -28,7 +28,7 @@ INSTRUCCIONES PARA AÑADIR ELEMENTOS:
 
 MOTORES_PROPULSION = [
     # Ejemplo Barco: 1 solo motor principal
-    {"nombre": "motor_principal", "pin_pwm": 11},
+    {"nombre": "motor_principal", "pin_pwm": 17},
     
     # Ejemplo Tanque (Descomentar para usar):
     # {"nombre": "oruga_izquierda", "pin_pwm": 18},

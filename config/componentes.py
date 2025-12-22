@@ -98,7 +98,7 @@ ACTUADORES_MULTIEJE = [
     # Esta torreta podría estar bloqueada por una estructura, así que limitamos su giro.
     {
         "nombre": "torreta_popa",
-        "canales": {"giro": 6, "elevacion": 7},
+        "canales": {"giro": 7, "elevacion": 8},
         "limites": {
             "giro": (60, 120),     # GIRO RESTRINGIDO
             "elevacion": (0, 45)

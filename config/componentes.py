@@ -89,7 +89,7 @@ ACTUADORES_MULTIEJE = [
         "canales": {"giro": 3, "elevacion": 4},
         "limites": {
             "giro": (0, 180),      # Esta torreta gira completo
-            "elevacion": (90, 180)   # Solo eleva un poco
+            "elevacion": (0, 180)   # Solo eleva un poco
         },
         "pin_accion": 22 # Pin GPIO para activar disparo/láser
     },

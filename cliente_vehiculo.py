@@ -214,18 +214,19 @@ class ClienteVehiculo:
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (MPEG-TS HD 4:3)...")
+                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (OV5647 Native Mode)...")
                     
-                    # Configuración HD 4:3 (1280x960) para recuperar todo el sensor (Full FOV)
-                    # Al ser 4:3, no recorta la imagen arriba/abajo como hace el 16:9.
+                    # Configuración NATIVA OV5647 (1296x972 - 4:3)
+                    # - Usa el modo binning 2x2. Full FOV (Gran Angular 175° real).
+                    # - Bitrate 6 Mbps: Calidad cristalina para WiFi fuerte.
                     cmd = [
                         "rpicam-vid",
                         "-t", "0",
                         "--inline",
-                        "--width", "1280",      # Ancho HD
-                        "--height", "960",      # Alto 4:3 (Recupera lo que se veía "zoomed")
+                        "--width", "1296",      # Ancho Nativo 2x2
+                        "--height", "972",      # Alto Nativo 2x2
                         "--framerate", "30",
-                        "--bitrate", "2500000",
+                        "--bitrate", "6000000", # 6 Mbps (Super Alta Calidad)
                         "--profile", "high",
                         "--codec", "libav",
                         "--libav-format", "mpegts",

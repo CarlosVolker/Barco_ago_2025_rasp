@@ -212,13 +212,13 @@ class ClienteVehiculo:
             # El comando libcamera-vid falló porque MediaPlayer no acepta comandos string directos, solo files.
             # Volvemos al plan de usar FFmpeg nativo con el formato exacto que reportó v4l2-ctl.
             
-            if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con estrategia 'libcamera-vid' (Subproceso)...")
+                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (Subproceso)...")
                     
                     # Comando para obtener H.264 directo de la cámara (bypassing v4l2 bugs)
+                    # En Raspberry Pi OS Bookworm, el comando es 'rpicam-vid' en lugar de 'libcamera-vid'
                     cmd = [
-                        "libcamera-vid",
+                        "rpicam-vid",
                         "-t", "0",              # Sin límite de tiempo
                         "--inline",             # Headers en cada GOP (vital para streaming)
                         "--width", "640",
@@ -233,7 +233,7 @@ class ClienteVehiculo:
                     
                     # Pasamos el stdout (pipe) como archivo a MediaPlayer
                     self.player = MediaPlayer(self.cam_process.stdout, format="h264")
-                    logger.info("Cámara iniciada vía libcamera-vid pipe.")
+                    logger.info("Cámara iniciada vía rpicam-vid pipe.")
 
                 except Exception as e:
                     logger.error(f"Error al iniciar cámara: {e}")

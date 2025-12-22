@@ -214,19 +214,21 @@ class ClienteVehiculo:
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (MPEG-TS)...")
+                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (MPEG-TS HD)...")
                     
-                    # Usamos 'libav' para empaquetar en MPEG-TS, que SÍ incluye timestamps (PTS/DTS)
-                    # Esto evita las advertencias de 'Skipping video frame with no pts'.
+                    # Configuración HD (720p @ 30fps, 2.5Mbps)
+                    # Usamos 'libav' para empaquetar en MPEG-TS, que SÍ incluye timestamps.
                     cmd = [
                         "rpicam-vid",
                         "-t", "0",
                         "--inline",
-                        "--width", "640",
-                        "--height", "480",
-                        "--framerate", "20",
-                        "--codec", "libav",         # Usar backend libav
-                        "--libav-format", "mpegts",  # Formato contenedor transporte (streamable)
+                        "--width", "1280",      # HD 720p
+                        "--height", "720",
+                        "--framerate", "30",    # Más fluido
+                        "--bitrate", "2500000", # 2.5 Mbps (Calidad alta)
+                        "--profile", "high",    # Perfil H.264 High
+                        "--codec", "libav",
+                        "--libav-format", "mpegts",
                         "-o", "-"
                     ]
                     

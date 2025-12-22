@@ -212,6 +212,7 @@ class ClienteVehiculo:
             # El comando libcamera-vid falló porque MediaPlayer no acepta comandos string directos, solo files.
             # Volvemos al plan de usar FFmpeg nativo con el formato exacto que reportó v4l2-ctl.
             
+            if platform.system() == "Linux":
                 try:
                     logger.info("Iniciando cámara con estrategia 'rpicam-vid' (Subproceso)...")
                     

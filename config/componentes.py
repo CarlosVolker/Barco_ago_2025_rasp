@@ -86,7 +86,7 @@ ACTUADORES_MULTIEJE = [
     # TORRETA 1 (Ejemplo de personalización independiente)
     {
         "nombre": "torreta_proa",
-        "canales": {"giro": 1, "elevacion": 2},
+        "canales": {"giro": 3, "elevacion": 4},
         "limites": {
             "giro": (0, 180),      # Esta torreta gira completo
             "elevacion": (0, 45)   # Solo eleva un poco

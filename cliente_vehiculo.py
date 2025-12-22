@@ -214,42 +214,43 @@ class ClienteVehiculo:
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (Ultra Low Latency)...")
+                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (Equilibrada 3Mbps + ZeroLatency)...")
                     
-                    # Configuración NATIVA OV5647 (1296x972) + Optimización de Latencia
-                    # --low-latency 1: Preset para minimizar retardo en libav
-                    # --g 5: Keyframe cada 5 frames (recuperación rápida)
-                    # --flush: Enviar paquetes inmediatamente
+                    # Configuración EQUILIBRADA (3 Mbps + Cero Latencia)
+                    # Bajamos de 6 a 3 Mbps para evitar bufferbloat (drift).
+                    # Subimos GOP a 10 para mejor eficiencia sin sacrificar demasiada latencia de recuperación.
                     cmd = [
                         "rpicam-vid",
                         "-t", "0",
                         "--inline",
                         "--width", "1296",
                         "--height", "972",
-                        "--framerate", "30",
-                        "--bitrate", "6000000",
+                        "--framerate", "25",
+                        "--bitrate", "3000000", # 3 Mbps: Punto dulce calidad/latencia
                         "--profile", "high",
                         "--codec", "libav",
                         "--libav-format", "mpegts",
-                        "--low-latency", "1",   # NUEVO: Mode baja latencia
-                        "--g", "5",             # NUEVO: GOP corto
-                        "--flush",              # NUEVO: Sin buffer salida
+                        "--low-latency", "1",
+                        "--g", "10",            # GOP 10
+                        "--flush",
                         "-o", "-"
                     ]
                     
                     # Iniciamos el proceso
                     self.cam_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                     
-                    # Configuramos MediaPlayer para latencia cero.
-                    # 'fflags: nobuffer' es crítico para streams en vivo.
+                    # Configuramos MediaPlayer para latencia cero "Fire Hose".
+                    # Si FFmpeg se atrasa, descartará frames en vez de encolarlos (max_delay 0).
                     opciones_ffmpeg = {
                         "probesize": "32", 
                         "analyze_duration": "0",
-                        "fflags": "nobuffer",   # CRÍTICO
-                        "flags": "low_delay"    # CRÍTICO
+                        "fflags": "nobuffer",
+                        "flags": "low_delay",
+                        "reorder_queue_size": "0",  # No reordenar frames
+                        "max_delay": "0"            # Cero tolerancia al delay
                     }
                     self.player = MediaPlayer(self.cam_process.stdout, format="mpegts", options=opciones_ffmpeg)
-                    logger.info("Cámara iniciada vía rpicam-vid (Ultra Low Latency).")
+                    logger.info("Cámara iniciada vía rpicam-vid (3Mbps Anti-Drift).")
 
                 except Exception as e:
                     logger.error(f"Error al iniciar cámara: {e}")

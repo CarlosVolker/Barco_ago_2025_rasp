@@ -214,19 +214,19 @@ class ClienteVehiculo:
             
             if platform.system() == "Linux":
                 try:
-                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (MPEG-TS HD)...")
+                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (MPEG-TS HD 4:3)...")
                     
-                    # Configuración HD (720p @ 30fps, 2.5Mbps)
-                    # Usamos 'libav' para empaquetar en MPEG-TS, que SÍ incluye timestamps.
+                    # Configuración HD 4:3 (1280x960) para recuperar todo el sensor (Full FOV)
+                    # Al ser 4:3, no recorta la imagen arriba/abajo como hace el 16:9.
                     cmd = [
                         "rpicam-vid",
                         "-t", "0",
                         "--inline",
-                        "--width", "1280",      # HD 720p
-                        "--height", "720",
-                        "--framerate", "30",    # Más fluido
-                        "--bitrate", "2500000", # 2.5 Mbps (Calidad alta)
-                        "--profile", "high",    # Perfil H.264 High
+                        "--width", "1280",      # Ancho HD
+                        "--height", "960",      # Alto 4:3 (Recupera lo que se veía "zoomed")
+                        "--framerate", "30",
+                        "--bitrate", "2500000",
+                        "--profile", "high",
                         "--codec", "libav",
                         "--libav-format", "mpegts",
                         "-o", "-"

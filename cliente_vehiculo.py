@@ -1,22 +1,25 @@
 import asyncio
 import json
 import logging
-import os
 import time
 import random
 import platform
 import aiohttp
 from dotenv import load_dotenv
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RTCConfiguration, RTCIceServer
+from aiortc import RTCSessionDescription, RTCIceCandidate, RTCPeerConnection
 from aiortc.sdp import candidate_from_sdp
-from aiortc.contrib.media import MediaPlayer
 import websockets
-import subprocess
 
 # Importar configuración y controladores genéricos
 from config.credenciales import obtener_identidad, guardar_identidad, eliminar_identidad, TOKEN_VINCULACION
-from controladores.instancias import motores, servos_direccion, actuadores_multieje
-from config.componentes import MOTORES_PROPULSION, SERVOS_DIRECCION, ACTUADORES_MULTIEJE
+from src.edge_agent.bootstrap.settings import get_settings
+from src.edge_agent.control import ControlRuntime
+from src.edge_agent.contracts.signaling import SignalEnvelope
+from src.edge_agent.observability import MetricsCollector
+from src.edge_agent.runtime.legacy_adapter import build_inicio_payload, build_telemetry_payload
+from src.edge_agent.safety import DeadmanTimer
+from src.edge_agent.video import VideoPipeline
+from src.edge_agent.webrtc import PeerManager
 
 # Cargar variables de entorno
 load_dotenv()
@@ -25,14 +28,10 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ClienteVehiculo")
 
-# Constantes de Red
-URL_BACKEND = os.getenv("URL_BACKEND", "https://tu-api-backend.com")
-URL_SIGNALING = os.getenv("URL_SIGNALING", "wss://tu-api-backend.com/ws/vehiculo/")
-SERVIDOR_STUN = "stun:stun.l.google.com:19302"
-
 class ClienteVehiculo:
     def __init__(self):
-        self.pc = None
+        self.settings = get_settings()
+        self.pc: RTCPeerConnection | None = None
         self.ws = None
         self.player = None  # Referencia para mantener vivo el reproductor de video
         identidad = obtener_identidad()
@@ -41,6 +40,12 @@ class ClienteVehiculo:
         self.canal_datos = None
         self.ejecutando = True
         self.latencia = 0  # Latencia en ms
+        self.control_runtime = ControlRuntime()
+        self.video_pipeline = VideoPipeline()
+        self.peer_manager = PeerManager(self.video_pipeline)
+        self.metrics = MetricsCollector()
+        self.deadman = DeadmanTimer(self.settings.control_deadman_ms, self._on_deadman_timeout)
+        self.http_session: aiohttp.ClientSession | None = None
 
     async def registrar_si_es_necesario(self):
         """
@@ -55,54 +60,69 @@ class ClienteVehiculo:
             return False
 
         logger.info("Solicitando identidad al backend con Token de Vinculación...")
-        url = f"{URL_BACKEND}/api/vehiculos/provisionar/"
-        
-        async with aiohttp.ClientSession() as session:
-            try:
-                # El vehículo se presenta con el token generado por el usuario en la web
-                async with session.post(url, json={"token_vinculacion": TOKEN_VINCULACION}) as resp:
-                    if resp.status == 200:
-                        datos = await resp.json()
-                        self.num_serie = datos.get("num_serie")
-                        self.token = datos.get("token_secreto")
-                        
-                        if self.num_serie and self.token:
-                            guardar_identidad(self.num_serie, self.token)
-                            logger.info(f"Registro exitoso. Asignado num_serie: {self.num_serie}")
-                            return True
-                        else:
-                            logger.error("El backend no entregó identidad completa.")
-                            return False
-                    else:
-                        logger.error(f"Error en el aprovisionamiento: {resp.status}")
-                        return False
-            except Exception as e:
-                logger.error(f"Error de conexión durante el registro: {e}")
+        url = f"{self.settings.url_backend}/api/vehiculos/provisionar/"
+
+        session = self.http_session
+        created_session = False
+        if session is None:
+            session = aiohttp.ClientSession()
+            created_session = True
+
+        try:
+            # El vehículo se presenta con el token generado por el usuario en la web
+            async with session.post(url, json={"token_vinculacion": TOKEN_VINCULACION}) as resp:
+                if resp.status == 200:
+                    datos = await resp.json()
+                    self.num_serie = datos.get("num_serie")
+                    self.token = datos.get("token_secreto")
+
+                    if self.num_serie and self.token:
+                        guardar_identidad(self.num_serie, self.token)
+                        self.metrics.inc("provision_success")
+                        logger.info(f"Registro exitoso. Asignado num_serie: {self.num_serie}")
+                        return True
+
+                    logger.error("El backend no entregó identidad completa.")
+                    self.metrics.inc("provision_invalid_payload")
+                    return False
+
+                logger.error(f"Error en el aprovisionamiento: {resp.status}")
+                self.metrics.inc("provision_error_status")
                 return False
+        except Exception as e:
+            self.metrics.inc("provision_connection_error")
+            logger.error(f"Error de conexión durante el registro: {e}")
+            return False
+        finally:
+            if created_session:
+                await session.close()
 
     async def conectar_signaling(self):
         """
         Establece conexión con el servidor de señalización (Websocket).
         """
-        url = f"{URL_SIGNALING}{self.num_serie}/?token={self.token}"
+        url = f"{self.settings.url_signaling}{self.num_serie}/?token={self.token}"
+        retry_delay_s = 1.0
+        max_delay_s = 30.0
         
         logger.info(f"Conectando a señalización con ID: {self.num_serie}")
         
         while self.ejecutando:
+            should_retry = True
             try:
-                async with websockets.connect(url) as websocket:
+                async with websockets.connect(
+                    url,
+                    ping_interval=20,
+                    ping_timeout=20,
+                    close_timeout=5,
+                ) as websocket:
                     self.ws = websocket
+                    retry_delay_s = 1.0
+                    self.metrics.inc("signaling_connections")
                     logger.info("Conectado al servidor de señalización.")
                     
                     # Notificar al backend que estamos online e informar hardware
-                    await self.enviar_señal(None, "inicio_vehiculo", {
-                        "num_serie": self.num_serie,
-                        "config": {
-                            "motores": MOTORES_PROPULSION,
-                            "servos_direccion": SERVOS_DIRECCION,
-                            "actuadores_multieje": ACTUADORES_MULTIEJE
-                        }
-                    })
+                    await self.enviar_señal(None, "inicio_vehiculo", build_inicio_payload(str(self.num_serie or "")))
 
                     # Bucle de recepción de mensajes
                     async for mensaje in websocket:
@@ -114,16 +134,28 @@ class ClienteVehiculo:
                     logger.critical("Acceso denegado (401/403) en WebSocket. Credenciales revocadas.")
                     eliminar_identidad()
                     self.ejecutando = False
-                    break
+                    should_retry = False
                 else:
-                     logger.warning(f"Error HTTP en WebSocket: {e.status_code}. Reintentando...")
-                     await asyncio.sleep(5)
+                    self.metrics.inc("signaling_http_errors")
+                    logger.warning(f"Error HTTP en WebSocket: {e.status_code}.")
 
             except Exception as e:
-                logger.warning(f"Conexión de señalización perdida: {e}. Reintentando en 5 segundos...")
-                await asyncio.sleep(5)
+                self.metrics.inc("signaling_disconnects")
+                logger.warning(f"Conexión de señalización perdida: {e}.")
+            finally:
+                self.ws = None
+
+            if not self.ejecutando or not should_retry:
+                break
+
+            wait_s = min(max_delay_s, retry_delay_s + random.uniform(0, retry_delay_s * 0.2))
+            logger.info("Reintentando señalización en %.2f segundos...", wait_s)
+            self.metrics.set_gauge("signaling_retry_delay_s", wait_s)
+            await asyncio.sleep(wait_s)
+            retry_delay_s = min(max_delay_s, retry_delay_s * 2)
 
     async def manejar_mensaje_señalizacion(self, mensaje):
+        tipo = "desconocido"
         try:
             tipo = mensaje.get("type")
             remitente = mensaje.get("sender")
@@ -136,16 +168,20 @@ class ClienteVehiculo:
 
                 logger.info(f"Recibida oferta WebRTC de {remitente}")
                 await self.crear_peer_connection(remitente)
+                if self.pc is None:
+                    logger.error("No se pudo crear RTCPeerConnection.")
+                    return
+                pc = self.pc
                 # Si 'type' no viene en el payload, usamos 'offer' (que es el valor de 'tipo')
                 sdp_type = carga.get("type", tipo)
-                await self.pc.setRemoteDescription(RTCSessionDescription(sdp=carga["sdp"], type=sdp_type))
+                await pc.setRemoteDescription(RTCSessionDescription(sdp=carga["sdp"], type=sdp_type))
                 
-                respuesta = await self.pc.createAnswer()
-                await self.pc.setLocalDescription(respuesta)
+                respuesta = await pc.createAnswer()
+                await pc.setLocalDescription(respuesta)
                 
                 await self.enviar_señal(remitente, "answer", {
-                    "sdp": self.pc.localDescription.sdp, 
-                    "type": self.pc.localDescription.type
+                    "sdp": pc.localDescription.sdp,
+                    "type": pc.localDescription.type
                 })
             
             elif tipo == "finalizar_conexion":
@@ -158,6 +194,7 @@ class ClienteVehiculo:
                     sent_time = float(carga)
                     now = time.time() * 1000
                     self.latencia = now - sent_time
+                    self.metrics.set_gauge("latency_ms", self.latencia)
                     logger.debug(f"Latencia actualizada: {self.latencia:.2f} ms")
                 except (ValueError, TypeError):
                     logger.warning("Payload de pong inválido")
@@ -190,37 +227,25 @@ class ClienteVehiculo:
                     self.procesar_comando_control(json.dumps(carga) if isinstance(carga, dict) else carga)
 
         except Exception as e:
-            logger.error(f"Error procesando mensaje de señalización ({tipo}): {e}")
+            logger.error(f"Error procesando mensaje de señalización: {e}")
 
     async def liberar_recursos(self):
         """
         Detiene la cámara, cierra WebRTC y para motores de forma segura.
         """
+        self.deadman.stop()
+
         # 1. Motores a Neutro (Standby)
-        # NO usar motor.detener() porque mata el PWM y causa pitidos de error en el ESC
-        try:
-            for motor in motores: 
-                logger.info(f"Poniendo motor {motor.nombre} en Standby (0)...")
-                motor.establecer_velocidad(0)
-        except: pass
+        self.control_runtime.stop_all_motors()
         
-        # 2. Cerrar WebRTC
+        # 2. Detener pipeline de video
+        self.video_pipeline.stop()
+
+        # 3. Cerrar WebRTC
         if self.pc:
             logger.info("Cerrando conexión WebRTC...")
             await self.pc.close()
             self.pc = None
-
-        # 3. Matar proceso de cámara (rpicam-vid)
-        # Es crítico matarlo para liberar /dev/video0
-        if hasattr(self, 'cam_process') and self.cam_process:
-            logger.info("Terminando proceso de cámara...")
-            self.cam_process.terminate()
-            try:
-                self.cam_process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                logger.warning("La cámara no se cerró a tiempo, forzando kill...")
-                self.cam_process.kill()
-            self.cam_process = None
             
         logger.info("Recursos liberados correctamente.")
 
@@ -228,148 +253,28 @@ class ClienteVehiculo:
         if self.pc:
             await self.pc.close()
 
-        
-        # Servidor STUN por defecto de Google
-        servidor_stun = os.getenv("SERVIDOR_STUN", "stun:stun.l.google.com:19302")
-        
-        # Lista de Servidores ICE (STUN siempre, TURN si está configurado)
-        ice_servers = [RTCIceServer(urls=servidor_stun)]
-        
-        # Verificamos si hay configuración TURN (Crítico para 4G/Entel Chile)
-        turn_url = os.getenv("SERVIDOR_TURN_URL")
-        turn_user = os.getenv("SERVIDOR_TURN_USER")
-        turn_pass = os.getenv("SERVIDOR_TURN_PASS")
-        
-        if turn_url and turn_user and turn_pass:
-            logger.info("Configurando servidor TURN para conexión 4G segura.")
-            ice_servers.append(RTCIceServer(
-                urls=turn_url,
-                username=turn_user,
-                credential=turn_pass
-            ))
-
-        config_rtc = RTCConfiguration(iceServers=ice_servers)
-        self.pc = RTCPeerConnection(configuration=config_rtc)
-        
-        try:
-            # ESTRATEGIA: Uso directo de v4l2 con formato RAW explícito
-            # El comando libcamera-vid falló porque MediaPlayer no acepta comandos string directos, solo files.
-            # Volvemos al plan de usar FFmpeg nativo con el formato exacto que reportó v4l2-ctl.
-            
-            if platform.system() == "Linux":
-                try:
-                    logger.info("Iniciando cámara con estrategia 'rpicam-vid' (Equilibrada 3Mbps + ZeroLatency)...")
-                    
-                    # Configuración EQUILIBRADA (3 Mbps + Cero Latencia)
-                    # Bajamos de 6 a 3 Mbps para evitar bufferbloat (drift).
-                    # Subimos GOP a 10 para mejor eficiencia sin sacrificar demasiada latencia de recuperación.
-                    cmd = [
-                        "rpicam-vid",
-                        "-t", "0",
-                        "--inline",
-                        "--width", "1296",
-                        "--height", "972",
-                        "--framerate", "25",
-                        "--bitrate", "3000000", # 3 Mbps: Punto dulce calidad/latencia
-                        "--profile", "high",
-                        "--codec", "libav",
-                        "--libav-format", "mpegts",
-                        "--low-latency", "1",
-                        "--g", "10",            # GOP 10
-                        "--flush",
-                        "-o", "-"
-                    ]
-                    
-                    # Iniciamos el proceso
-                    self.cam_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                    
-                    # Configuramos MediaPlayer para latencia cero "Fire Hose".
-                    # Si FFmpeg se atrasa, descartará frames en vez de encolarlos (max_delay 0).
-                    opciones_ffmpeg = {
-                        "probesize": "32", 
-                        "analyze_duration": "0",
-                        "fflags": "nobuffer",
-                        "flags": "low_delay",
-                        "reorder_queue_size": "0",  # No reordenar frames
-                        "max_delay": "0"            # Cero tolerancia al delay
-                    }
-                    self.player = MediaPlayer(self.cam_process.stdout, format="mpegts", options=opciones_ffmpeg)
-                    logger.info("Cámara iniciada vía rpicam-vid (3Mbps Anti-Drift).")
-
-                except Exception as e:
-                    logger.error(f"Error al iniciar cámara: {e}")
-                    # No relanzamos para que no muera el script, solo avisamos
-            else:
-                # Windows
-                self.player = MediaPlayer("video=Integrated Camera", format="dshow", options={})
-
-            if self.player:
-                self.pc.addTrack(self.player.video)
-                logger.info("Pista de video añadida.")
-
-        except Exception as e:
-            logger.error(f"Error al iniciar cámara: {e}")
-            if "No such file" in str(e) and "/dev/video" in str(e):
-                logger.warning("Verifique conexión de la cámara. Ejecute 'ls -l /dev/video*' para listar dispositivos.")
-            logger.info("Continuando sin video...")
-
-        @self.pc.on("datachannel")
-        def on_datachannel(canal):
-            logger.info(f"Canal de datos establecido: {canal.label}")
+        def on_datachannel_ready(canal):
             self.canal_datos = canal
-            
-            @canal.on("message")
-            def on_message(mensaje):
-                self.procesar_comando_control(mensaje)
+
+        self.pc = self.peer_manager.create_peer(
+            on_data_message=self.procesar_comando_control,
+            on_datachannel_ready=on_datachannel_ready,
+        )
+        self.deadman.start()
+        self.metrics.inc("peer_connections_created")
 
     def procesar_comando_control(self, cmd_json):
-        try:
-            comando = json.loads(cmd_json)
-            tipo = comando.get("tipo")
-            
-            if tipo == "movimiento":
-                velocidad = comando.get("velocidad", 0) # -100 a 100
-                giro = comando.get("giro", 90)          # 0 a 180 (para todos los servos de direccion)
-                
-                # Control de motores
-                for motor in motores:
-                    motor.establecer_velocidad(velocidad)
-                
-                # Control de servos de dirección
-                for servo in servos_direccion:
-                    servo.establecer_angulo(giro)
-            
-            elif tipo == "motor_individual":
-                # Control preciso de un motor específico (útil para tanques o maniobras complejas)
-                idx = comando.get("indice", 0)
-                velocidad = comando.get("velocidad", 0)
-                
-                if idx < len(motores):
-                    motores[idx].establecer_velocidad(velocidad)
-                else:
-                    logger.warning(f"Indice de motor {idx} fuera de rango.")
-                    
-            elif tipo == "actuador_multieje":
-                # Formato esperado: {"tipo": "actuador_multieje", "indice": 0, "eje": "pan", "angulo": 90}
-                idx = comando.get("indice", 0)
-                eje = comando.get("eje")
-                angulo = comando.get("angulo")
-                accion = comando.get("ejecutar_accion", False)
-                
-                if idx < len(actuadores_multieje):
-                    actuador = actuadores_multieje[idx]
-                    if eje is not None and angulo is not None:
-                        actuador.mover_eje(eje, angulo)
-                    if accion:
-                        actuador.ejecutar_accion()
+        if self.control_runtime.process_command(cmd_json):
+            self.deadman.touch()
+            self.metrics.inc("control_commands_ok")
+            return
 
-            elif tipo == "parar":
-                for motor in motores:
-                    motor.establecer_velocidad(0)
-                logger.info("PARADA DE EMERGENCIA")
+        self.metrics.inc("control_commands_invalid")
 
-        except Exception as e:
-            logger.error(f"Error procesando comando: {e}")
+    async def _on_deadman_timeout(self):
+        logger.warning("Deadman timeout alcanzado, deteniendo motores por seguridad.")
+        self.metrics.inc("deadman_timeouts")
+        self.control_runtime.stop_all_motors()
 
     async def bucle_ping(self):
         """
@@ -404,38 +309,45 @@ class ClienteVehiculo:
         """
         Envía parámetros al backend periódicamente.
         """
-        url = f"{URL_BACKEND}/api/vehiculos/telemetria/"
+        url = f"{self.settings.url_backend}/api/vehiculos/telemetria/"
         headers = {"Authorization": f"Bearer {self.token}"}
         
         while self.ejecutando:
             if self.token:
-                datos_telemetria = {
-                    "num_serie": self.num_serie,
-                    "estado": "online",
-                    "bateria": 12.5,
-                    "latitud": -33.4489,
-                    "longitud": -70.6693,
-                    "intensidad_señal": self.obtener_nivel_senal(),
-                    "temperatura_cpu": self.obtener_temperatura_cpu(),
-                    "latencia": int(self.latencia)
-                }
+                datos_telemetria = build_telemetry_payload(
+                    num_serie=self.num_serie,
+                    estado="online",
+                    bateria=12.5,
+                    latitud=-33.4489,
+                    longitud=-70.6693,
+                    intensidad_señal=self.obtener_nivel_senal(),
+                    temperatura_cpu=self.obtener_temperatura_cpu(),
+                    latencia=int(self.latencia),
+                )
                 
                 try:
-                    async with aiohttp.ClientSession() as session:
+                    session = self.http_session
+                    if session is None:
+                        logger.warning("Sesion HTTP no disponible para telemetria.")
+                        self.metrics.inc("telemetry_session_missing")
+                    else:
                         async with session.post(url, json=datos_telemetria, headers=headers) as resp:
                             if resp.status == 200:
-                                pass # Todo OK
+                                self.metrics.inc("telemetry_sent")
                             elif resp.status in [401, 403]:
                                 logger.critical(f"Telemetría Rechazada ({resp.status}). Revocando identidad local...")
+                                self.metrics.inc("telemetry_rejected")
                                 eliminar_identidad()
                                 self.ejecutando = False
                                 break
                             else:
+                                self.metrics.inc("telemetry_error_status")
                                 logger.warning(f"Error enviando telemetría: {resp.status}")
                 except Exception as e:
+                    self.metrics.inc("telemetry_exception")
                     logger.error(f"Falla en envío de telemetría: {e}")
             
-            await asyncio.sleep(10)
+            await asyncio.sleep(self.settings.telemetry_interval_s)
 
     def obtener_nivel_senal(self):
         """
@@ -473,19 +385,25 @@ class ClienteVehiculo:
 
     async def enviar_señal(self, destino, tipo, carga):
         if self.ws:
-            await self.ws.send(json.dumps({
-                "target": destino,
-                "type": tipo,
-                "payload": carga
-            }))
+            envelope = SignalEnvelope(target=destino, type=tipo, payload=carga)
+            await self.ws.send(envelope.model_dump_json())
 
     async def iniciar(self):
-        if await self.registrar_si_es_necesario():
-            await asyncio.gather(
-                self.conectar_signaling(),
-                self.bucle_telemetria(),
-                self.bucle_ping()
-            )
+        if self.http_session is None:
+            self.http_session = aiohttp.ClientSession()
+
+        try:
+            if await self.registrar_si_es_necesario():
+                await asyncio.gather(
+                    self.conectar_signaling(),
+                    self.bucle_telemetria(),
+                    self.bucle_ping()
+                )
+        finally:
+            self.deadman.stop()
+            if self.http_session is not None:
+                await self.http_session.close()
+                self.http_session = None
 
 if __name__ == "__main__":
     cliente = ClienteVehiculo()

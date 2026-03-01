@@ -76,6 +76,21 @@ python main.py
   - sin crear una sesion HTTP nueva por cada envio,
   - cierre limpio de sesion HTTP al finalizar el proceso.
 
+### Smoke 9 (PR-4): Perfil de video configurable
+
+- Accion: definir `VIDEO_PROFILE=low` en `.env` y reiniciar agente.
+- Esperado:
+  - log con inicio de camara usando perfil `low`,
+  - bitrate y resolucion inferiores al perfil `balanced`,
+  - control mantiene baja latencia aun con red inestable.
+
+### Smoke 10 (PR-4): Snapshot de observabilidad
+
+- Accion: ejecutar agente con `OBSERVABILITY_LOG_INTERVAL_S=10`.
+- Esperado:
+  - cada ~10s aparece log `Observability snapshot` con contadores/gauges,
+  - se observan incrementos en `control_commands_ok`, `telemetry_sent`, `signaling_connections` segun actividad.
+
 ## Troubleshooting rapido
 
 ## No hay video

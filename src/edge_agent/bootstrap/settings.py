@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,7 +16,10 @@ class EdgeSettings(BaseSettings):
     servidor_turn_pass: str | None = Field(default=None, validation_alias="SERVIDOR_TURN_PASS")
 
     telemetry_interval_s: int = Field(default=10, validation_alias="TELEMETRY_INTERVAL_S")
+    telemetry_request_timeout_s: int = Field(default=10, validation_alias="TELEMETRY_REQUEST_TIMEOUT_S")
     control_deadman_ms: int = Field(default=300, validation_alias="CONTROL_DEADMAN_MS")
+    observability_log_interval_s: int = Field(default=30, validation_alias="OBSERVABILITY_LOG_INTERVAL_S")
+    video_profile: Literal["low", "balanced", "high"] = Field(default="balanced", validation_alias="VIDEO_PROFILE")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
 

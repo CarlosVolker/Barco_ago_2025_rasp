@@ -52,6 +52,18 @@ Documento corto para entender por que existen PR-1/PR-2 y que no debe revertirse
 - Implementacion: `src/edge_agent/observability/metrics.py`.
 - Alcance: contadores, gauges y timestamps para control, signaling, telemetria y deadman.
 
+## Decision 9 (PR-4): perfiles de video configurables por entorno
+
+- Motivo: equilibrar latencia/calidad segun red (especialmente 4G/CGNAT).
+- Implementacion: `src/edge_agent/video/pipeline.py` + setting `VIDEO_PROFILE`.
+- Perfiles disponibles: `low`, `balanced`, `high`.
+
+## Decision 10 (PR-4): snapshot periodico de observabilidad en logs
+
+- Motivo: troubleshooting rapido sin stack externo de monitoreo.
+- Implementacion: `cliente_vehiculo.py::bucle_observabilidad()` con `OBSERVABILITY_LOG_INTERVAL_S`.
+- Alcance: imprime counters/gauges actuales del `MetricsCollector`.
+
 ## Migracion PR-1 -> PR-2
 
 ### Lo ya migrado
@@ -75,6 +87,8 @@ Documento corto para entender por que existen PR-1/PR-2 y que no debe revertirse
 4. No quitar la llamada a `stop_all_motors()` en `StopCommand` ni en timeout de deadman.
 5. No volver a sesiones HTTP efimeras por ciclo de telemetria.
 6. No alterar contrato externo de signaling/control al endurecer runtime interno.
+7. No eliminar `VIDEO_PROFILE=balanced` como fallback seguro.
+8. No bajar intervalo de observabilidad por debajo de 5s para evitar ruido en logs.
 
 ## Pitfalls historicos repetidos
 

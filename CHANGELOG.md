@@ -12,6 +12,23 @@ Este proyecto sigue un changelog orientado a operacion de campo y mantenimiento 
 ### Changed
 - `README.md` ahora incluye seccion de Arquitectura Modular (PR-1/PR-2), aclaracion P2P WebRTC y enlaces directos a documentacion.
 
+## [1.4.0] - 2026-03-01
+
+Hardening PR-4 con foco en observabilidad de runtime y perfiles de video adaptativos.
+
+### Added
+- Bucle de observabilidad en `cliente_vehiculo.py` para registrar snapshots periodicos de metricas en logs.
+- Tests nuevos para perfiles de video y ruta minima de control/senalizacion:
+  - `tests/test_video_pipeline_profiles.py`
+  - `tests/test_cliente_signaling_control.py`
+
+### Changed
+- `VideoPipeline` ahora soporta perfiles `low`, `balanced`, `high` con cambio por `VIDEO_PROFILE`.
+- Timeouts HTTP configurables por `TELEMETRY_REQUEST_TIMEOUT_S` en `EdgeSettings`.
+- Parametros operativos nuevos en settings:
+  - `OBSERVABILITY_LOG_INTERVAL_S`
+  - `VIDEO_PROFILE`
+
 ## [1.3.0] - 2026-03-01
 
 Hardening operativo PR-3 con foco en seguridad de control y resiliencia de red.

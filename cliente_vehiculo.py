@@ -41,7 +41,7 @@ class ClienteVehiculo:
         self.ejecutando = True
         self.latencia = 0  # Latencia en ms
         self.control_runtime = ControlRuntime()
-        self.video_pipeline = VideoPipeline()
+        self.video_pipeline = VideoPipeline(profile=self.settings.video_profile)
         self.peer_manager = PeerManager(self.video_pipeline)
         self.metrics = MetricsCollector()
         self.deadman = DeadmanTimer(self.settings.control_deadman_ms, self._on_deadman_timeout)
@@ -65,7 +65,8 @@ class ClienteVehiculo:
         session = self.http_session
         created_session = False
         if session is None:
-            session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=self.settings.telemetry_request_timeout_s)
+            session = aiohttp.ClientSession(timeout=timeout)
             created_session = True
 
         try:
@@ -262,6 +263,7 @@ class ClienteVehiculo:
         )
         self.deadman.start()
         self.metrics.inc("peer_connections_created")
+        self.metrics.set_gauge("video_profile", {"low": 0, "balanced": 1, "high": 2}.get(self.video_pipeline.profile, 1))
 
     def procesar_comando_control(self, cmd_json):
         if self.control_runtime.process_command(cmd_json):
@@ -290,6 +292,19 @@ class ClienteVehiculo:
             
             # Espera aleatoria entre 2 y 5 segundos
             await asyncio.sleep(random.uniform(2, 5))
+
+    async def bucle_observabilidad(self):
+        interval = max(5, self.settings.observability_log_interval_s)
+        while self.ejecutando:
+            snapshot = self.metrics.snapshot()
+            counters = snapshot.get("counters", {})
+            gauges = snapshot.get("gauges", {})
+            logger.info(
+                "Observability snapshot | counters=%s gauges=%s",
+                counters,
+                gauges,
+            )
+            await asyncio.sleep(interval)
 
     def obtener_temperatura_cpu(self):
         """
@@ -390,14 +405,16 @@ class ClienteVehiculo:
 
     async def iniciar(self):
         if self.http_session is None:
-            self.http_session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=self.settings.telemetry_request_timeout_s)
+            self.http_session = aiohttp.ClientSession(timeout=timeout)
 
         try:
             if await self.registrar_si_es_necesario():
                 await asyncio.gather(
                     self.conectar_signaling(),
                     self.bucle_telemetria(),
-                    self.bucle_ping()
+                    self.bucle_ping(),
+                    self.bucle_observabilidad(),
                 )
         finally:
             self.deadman.stop()

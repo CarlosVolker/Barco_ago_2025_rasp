@@ -8,24 +8,39 @@ logger = logging.getLogger("edge_agent.video.pipeline")
 
 
 class VideoPipeline:
-    def __init__(self):
+    _PROFILES = {
+        "low": {"width": 640, "height": 360, "fps": 20, "bitrate": 700000},
+        "balanced": {"width": 1280, "height": 720, "fps": 30, "bitrate": 2500000},
+        "high": {"width": 1296, "height": 972, "fps": 30, "bitrate": 3000000},
+    }
+
+    def __init__(self, profile: str = "balanced"):
         self.player = None
         self.cam_process = None
+        self.profile = profile if profile in self._PROFILES else "balanced"
 
-    def start_linux_pipe(self):
-        cmd = [
+    def set_profile(self, profile: str) -> None:
+        if profile in self._PROFILES:
+            self.profile = profile
+        else:
+            logger.warning("Perfil de video desconocido '%s', usando balanced.", profile)
+            self.profile = "balanced"
+
+    def build_linux_cmd(self):
+        p = self._PROFILES[self.profile]
+        return [
             "rpicam-vid",
             "-t",
             "0",
             "--inline",
             "--width",
-            "1280",
+            str(p["width"]),
             "--height",
-            "720",
+            str(p["height"]),
             "--framerate",
-            "30",
+            str(p["fps"]),
             "--bitrate",
-            "2500000",
+            str(p["bitrate"]),
             "--profile",
             "high",
             "--codec",
@@ -40,6 +55,9 @@ class VideoPipeline:
             "-o",
             "-",
         ]
+
+    def start_linux_pipe(self):
+        cmd = self.build_linux_cmd()
 
         opciones_ffmpeg = {
             "probesize": "32",
@@ -58,7 +76,7 @@ class VideoPipeline:
         try:
             if platform.system() == "Linux":
                 if self.player is None:
-                    logger.info("Iniciando camara con estrategia rpicam-vid (2.5Mbps + low latency).")
+                    logger.info("Iniciando camara rpicam-vid perfil '%s'.", self.profile)
                     self.start_linux_pipe()
             else:
                 if self.player is None:

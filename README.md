@@ -11,6 +11,16 @@ Este proyecto convierte una **Raspberry Pi 4** en el cerebro de un vehículo con
 *   **Conectividad Universal**: Funciona con cualquier proveedor de Internet (WiFi, 4G, 5G, Starlink) gracias a la autoconfiguración STUN/TURN.
 *   **Resiliencia**: Reconexión automática ante caídas de señal.
 
+## Arquitectura Modular (PR-1/PR-2)
+
+El proyecto esta en migracion controlada desde un cliente monolitico (PR-1) hacia un edge agent modular (PR-2):
+
+- **PR-1 (legacy estable)**: `cliente_vehiculo.py` concentra flujo de provisionamiento, signaling, WebRTC y telemetria.
+- **PR-2 (modular activo)**: `src/edge_agent/` separa `control`, `video`, `webrtc`, `contracts`, `capabilities`, `bootstrap`, `identity` y `runtime`.
+- **Compatibilidad**: `src/edge_agent/runtime/legacy_adapter.py` mantiene interoperabilidad durante la transicion.
+
+> **Nota critica de arquitectura**: el **video y control en vivo viajan por WebRTC P2P** (DataChannel + media SRTP). El backend (Django u otro) es el **control plane**: autentica, señaliza, provisiona y persiste telemetria.
+
 ## Estructura del Proyecto
 
 *   `main.py`: Punto de entrada del sistema.
@@ -24,8 +34,8 @@ Este proyecto convierte una **Raspberry Pi 4** en el cerebro de un vehículo con
 ## Requisitos de Hardware
 
 1.  Raspberry Pi 4 (Recomendado) o 3B+.
-2.  Controlador de Servos **PCA9685** (I2C).
-3.  Controlador de Motores (ESC) compatible con PWM.
+2.  Controlador de Servos **PCA9685** (I2C) - **OBLIGATORIO para Servos y Motores**.
+3.  Controlador de Motores (ESC) sin cable rojo (BEC desconectado).
 4.  Cámara USB o Pi Camera.
 5.  Conexión a Internet (WiFi o Dongle 4G).
 
@@ -107,3 +117,12 @@ Si estás creando el servidor para controlar este vehículo, lee obligatoriament
 
 Para detalles sobre **cifrado, versiones de librerías, protocolos exactos de red y hardware**, consulta:
 👉 **[DOCUMENTACION_TECNICA.md](DOCUMENTACION_TECNICA.md)**
+
+## Nueva Documentacion Operativa
+
+- Indice general: **[docs/0_indice_documentacion.md](docs/0_indice_documentacion.md)**
+- Arquitectura modular PR-1/PR-2: **[docs/5_arquitectura_modular_edge_agent.md](docs/5_arquitectura_modular_edge_agent.md)**
+- Guia rapida de alta de unidad: **[docs/6_guia_rapida_nuevo_vehiculo.md](docs/6_guia_rapida_nuevo_vehiculo.md)**
+- Contratos y capabilities v1.0.0: **[docs/7_contratos_y_capabilities_v1_0_0.md](docs/7_contratos_y_capabilities_v1_0_0.md)**
+- Runbook y smoke tests: **[docs/8_runbook_operacion_y_smoke_tests.md](docs/8_runbook_operacion_y_smoke_tests.md)**
+- Documentacion para agentes AI: **[docs/agentes/README_AGENTES.md](docs/agentes/README_AGENTES.md)**

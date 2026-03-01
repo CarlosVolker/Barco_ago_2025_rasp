@@ -24,15 +24,16 @@ INSTRUCCIONES PARA AÑADIR ELEMENTOS:
 # 1. MOTORES DE PROPULSIÓN (Brushless con ESC)
 # -----------------------------------------------------------------------------
 # Controlan el avance y retroceso.
-# - pin_pwm: Número de pin GPIO (BCM) de la Raspberry Pi.
+# - canal: Número de canal (0-15) en la placa PCA9685.
+# - direccion_i2c: Dirección de la placa (0x40 por defecto).
 
 MOTORES_PROPULSION = [
     # Ejemplo Barco: 1 solo motor principal
-    {"nombre": "motor_principal", "pin_pwm": 17},
+    {"nombre": "motor_principal", "canal": 12, "direccion_i2c": 0x40},
     
     # Ejemplo Tanque (Descomentar para usar):
-    # {"nombre": "oruga_izquierda", "pin_pwm": 18},
-    # {"nombre": "oruga_derecha", "pin_pwm": 19},
+    # {"nombre": "oruga_izquierda", "canal": 13, "direccion_i2c": 0x40},
+    # {"nombre": "oruga_derecha", "canal": 14, "direccion_i2c": 0x40},
 ]
 
 # -----------------------------------------------------------------------------
@@ -47,16 +48,9 @@ SERVOS_DIRECCION = [
         "nombre": "timon_central", 
         "canal": 0, 
         "angulo_min": 0,  # Límite izquierdo físico
-        "angulo_max": 180  # Límite derecho físico
+        "angulo_max": 180,  # Límite derecho físico
+        "direccion_i2c": 0x40
     },
-    
-    # Ejemplo Auto (Descomentar):
-    # {
-    #     "nombre": "direccion_delantera", 
-    #     "canal": 0, 
-    #     "angulo_min": 60, 
-    #     "angulo_max": 120
-    # },
 ]
 
 # -----------------------------------------------------------------------------
@@ -67,8 +61,6 @@ SERVOS_DIRECCION = [
 
 ACTUADORES_MULTIEJE = [
     # CÁMARA PTZ (Pan-Tilt-Zoom)
-    # Ejemplo solicitado: PTZ de 2 servos (Horizontal y Vertical).
-    # Si tuvieras 3 (Zoom/Roll), solo añade "roll": canal en el diccionario.
     {
         "nombre": "camara_ptz",
         "canales": {
@@ -76,11 +68,10 @@ ACTUADORES_MULTIEJE = [
             "tilt": 2   # Servo Vertical en Canal 2
         },
         "limites": {
-            # El eje horizontal suele tener más recorrido (ej. 0 a 180 grados)
             "pan": (0, 180),
-            # El eje vertical suele estar más restringido (ej. 45 a 90 grados) para no mirar el techo
             "tilt": (0, 180)
-        }
+        },
+        "direccion_i2c": 0x40
     },
 
     # TORRETA 1 (Ejemplo de personalización independiente)
@@ -88,22 +79,24 @@ ACTUADORES_MULTIEJE = [
         "nombre": "torreta_proa",
         "canales": {"giro": 3, "elevacion": 4},
         "limites": {
-            "giro": (0, 180),      # Esta torreta gira completo
-            "elevacion": (0, 180)   # Solo eleva un poco
+            "giro": (0, 180),      
+            "elevacion": (0, 180)   
         },
-        "pin_accion": 22 # Pin GPIO para activar disparo/láser
+        "pin_accion": 22, # Pin GPIO para activar disparo/láser (Sigue siendo GPIO directo)
+        "direccion_i2c": 0x40
     },
 
-    # TORRETA 2 (Ejemplo con límites distintos)
-    # Esta torreta podría estar bloqueada por una estructura, así que limitamos su giro.
+    # TORRETA 2 (Ejemplo con límites distintos - Segunda Placa opcional)
+    # Si tienes una segunda placa PCA9685, cambia direccion_i2c a 0x41
     {
         "nombre": "torreta_popa",
         "canales": {"giro": 7, "elevacion": 8},
         "limites": {
-            "giro": (60, 120),     # GIRO RESTRINGIDO
+            "giro": (60, 120),    
             "elevacion": (0, 45)
         },
-        "pin_accion": 23
+        "pin_accion": 23,
+        "direccion_i2c": 0x40 
     }
 ]
 

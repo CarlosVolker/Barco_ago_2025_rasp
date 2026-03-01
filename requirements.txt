@@ -10,7 +10,7 @@ Adafruit-PureIO==1.1.11
 binho-host-adapter==0.1.6
 board==1.0
 cffi==1.17.1
-cryptography==45.0.5
+cryptography==45.0.7
 pigpio==1.78
 pycparser==2.22
 pyftdi==0.56.0
@@ -22,3 +22,6 @@ typing_extensions==4.14.1
 aiohttp==3.9.3
 websockets==12.0
 python-dotenv
+pydantic>=2
+pydantic-settings>=2
+python-json-logger>=2

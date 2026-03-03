@@ -1,10 +1,21 @@
 import sys
 import os
+import time
 
 # Agregamos el directorio actual al path para que los imports funcionen
 sys.path.append(os.getcwd())
 
 print("--- INICIANDO TEST DE HARDWARE (MOCK) ---")
+
+motores = []
+
+
+def detener_todo_seguro(motores):
+    for motor in motores:
+        try:
+            motor.establecer_velocidad(0)
+        except Exception:
+            pass
 
 try:
     from controladores.instancias import motores, servos_direccion, actuadores_multieje
@@ -16,8 +27,10 @@ try:
     print(f"Motores encontrados: {len(motores)}")
     for m in motores:
         print(f" - Motor: {m.nombre} en Canal PCA {m.canal} Dir 0x{m.direccion_i2c:X}")
-        # Prueba de movimiento
-        m.establecer_velocidad(50)
+        # Prueba de movimiento segura: 3% por 1 segundo y detener
+        m.establecer_velocidad(3)
+        time.sleep(1.0)
+        m.establecer_velocidad(0)
         
     print(f"\nServos encontrados: {len(servos_direccion)}")
     for s in servos_direccion:
@@ -37,3 +50,9 @@ except Exception as e:
     print(f"\n[ERROR CRÍTICO] Falta en verificación: {e}")
     import traceback
     traceback.print_exc()
+finally:
+    try:
+        detener_todo_seguro(motores)
+        print("\n[SAFE] Motores llevados a 0 al finalizar test.")
+    except Exception:
+        pass

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,9 +18,28 @@ class EdgeSettings(BaseSettings):
     telemetry_interval_s: int = Field(default=10, validation_alias="TELEMETRY_INTERVAL_S")
     telemetry_request_timeout_s: int = Field(default=10, validation_alias="TELEMETRY_REQUEST_TIMEOUT_S")
     control_deadman_ms: int = Field(default=300, validation_alias="CONTROL_DEADMAN_MS")
+    control_require_sender_match: bool = Field(default=True, validation_alias="CONTROL_REQUIRE_SENDER_MATCH")
+    control_allow_missing_sender: bool = Field(default=False, validation_alias="CONTROL_ALLOW_MISSING_SENDER")
+    control_replay_window_ms: int = Field(default=30000, validation_alias="CONTROL_REPLAY_WINDOW_MS")
     observability_log_interval_s: int = Field(default=30, validation_alias="OBSERVABILITY_LOG_INTERVAL_S")
     video_profile: Literal["low", "balanced", "high"] = Field(default="balanced", validation_alias="VIDEO_PROFILE")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
+
+    @field_validator("url_backend")
+    @classmethod
+    def validate_backend_url(cls, value: str) -> str:
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL_BACKEND debe usar http:// o https://")
+        return value.rstrip("/")
+
+    @field_validator("url_signaling")
+    @classmethod
+    def validate_signaling_url(cls, value: str) -> str:
+        if not (value.startswith("ws://") or value.startswith("wss://")):
+            raise ValueError("URL_SIGNALING debe usar ws:// o wss://")
+        if not value.endswith("/"):
+            value = f"{value}/"
+        return value
 
 
 def get_settings() -> EdgeSettings:

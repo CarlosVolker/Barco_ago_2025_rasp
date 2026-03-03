@@ -2,7 +2,6 @@
 import sys
 import termios
 import tty
-import time
 from controladores.instancias import motores, servos_direccion, actuadores_multieje
 
 # Ajustes de pasos para pruebas manuales
@@ -15,6 +14,8 @@ velocidad_motor = 0
 angulo_direccion = 90
 angulo_ptz_pan = 90
 angulo_ptz_tilt = 90
+angulo_torreta_giro = 90
+angulo_torreta_elev = 90
 
 FLECHA_ARR = '\x1b[A'
 FLECHA_ABA = '\x1b[B'
@@ -41,12 +42,45 @@ def imprimir_instrucciones():
     print("  FLECHA IZQ/DER: Servo de Dirección (0)")
     print("  w/s: PTZ Tilt (Actuador 0)")
     print("  a/d: PTZ Pan (Actuador 0)")
+    print("  i/k: Torreta Elevación (Actuador 1)")
+    print("  j/l: Torreta Giro (Actuador 1)")
     print("  SPACE: Parada de Emergencia")
     print("  CTRL+C or q: Salir")
     print("=================================\n")
 
+
+def clamp(valor, minimo, maximo):
+    return max(minimo, min(maximo, valor))
+
+
+def limites_servo_direccion():
+    if not servos_direccion:
+        return (0, 180)
+    servo = servos_direccion[0]
+    return (getattr(servo, 'angulo_min', 0), getattr(servo, 'angulo_max', 180))
+
+
+def limites_actuador(indice_actuador, eje):
+    if indice_actuador >= len(actuadores_multieje):
+        return (0, 180)
+    actuador = actuadores_multieje[indice_actuador]
+    return actuador.limites.get(eje, (0, 180))
+
 def main():
-    global velocidad_motor, angulo_direccion, angulo_ptz_pan, angulo_ptz_tilt
+    global velocidad_motor, angulo_direccion, angulo_ptz_pan, angulo_ptz_tilt, angulo_torreta_giro, angulo_torreta_elev
+
+    dir_min, dir_max = limites_servo_direccion()
+    angulo_direccion = clamp(angulo_direccion, dir_min, dir_max)
+
+    ptz_pan_min, ptz_pan_max = limites_actuador(0, 'pan')
+    ptz_tilt_min, ptz_tilt_max = limites_actuador(0, 'tilt')
+    angulo_ptz_pan = clamp(angulo_ptz_pan, ptz_pan_min, ptz_pan_max)
+    angulo_ptz_tilt = clamp(angulo_ptz_tilt, ptz_tilt_min, ptz_tilt_max)
+
+    tor_giro_min, tor_giro_max = limites_actuador(1, 'giro')
+    tor_elev_min, tor_elev_max = limites_actuador(1, 'elevacion')
+    angulo_torreta_giro = clamp(angulo_torreta_giro, tor_giro_min, tor_giro_max)
+    angulo_torreta_elev = clamp(angulo_torreta_elev, tor_elev_min, tor_elev_max)
     
     # Inicializar ESCs si es necesario
     for m in motores:
@@ -68,29 +102,50 @@ def main():
                 if motores: motores[0].establecer_velocidad(velocidad_motor)
 
             elif tecla == FLECHA_IZQ: # Izquierda = Menos ángulo
-                angulo_direccion = max(0, angulo_direccion - PASO_ACTUADOR)
+                angulo_direccion = clamp(angulo_direccion - PASO_ACTUADOR, dir_min, dir_max)
                 if servos_direccion: servos_direccion[0].establecer_angulo(angulo_direccion)
 
             elif tecla == FLECHA_DER: # Derecha = Más ángulo
-                angulo_direccion = min(180, angulo_direccion + PASO_ACTUADOR)
+                angulo_direccion = clamp(angulo_direccion + PASO_ACTUADOR, dir_min, dir_max)
                 if servos_direccion: servos_direccion[0].establecer_angulo(angulo_direccion)
 
             # Control PTZ (Asumiendo que es el primer actuador multieje)
             elif tecla == 'w':
-                angulo_ptz_tilt = min(180, angulo_ptz_tilt + PASO_ACTUADOR)
+                angulo_ptz_tilt = clamp(angulo_ptz_tilt + PASO_ACTUADOR, ptz_tilt_min, ptz_tilt_max)
                 if actuadores_multieje: actuadores_multieje[0].mover_eje('tilt', angulo_ptz_tilt)
             
             elif tecla == 's':
-                angulo_ptz_tilt = max(0, angulo_ptz_tilt - PASO_ACTUADOR)
+                angulo_ptz_tilt = clamp(angulo_ptz_tilt - PASO_ACTUADOR, ptz_tilt_min, ptz_tilt_max)
                 if actuadores_multieje: actuadores_multieje[0].mover_eje('tilt', angulo_ptz_tilt)
 
             elif tecla == 'd':
-                angulo_ptz_pan = max(0, angulo_ptz_pan - PASO_ACTUADOR) # Invertido visualmente a veces
+                angulo_ptz_pan = clamp(angulo_ptz_pan - PASO_ACTUADOR, ptz_pan_min, ptz_pan_max) # Invertido visualmente a veces
                 if actuadores_multieje: actuadores_multieje[0].mover_eje('pan', angulo_ptz_pan)
 
             elif tecla == 'a':
-                angulo_ptz_pan = min(180, angulo_ptz_pan + PASO_ACTUADOR)
+                angulo_ptz_pan = clamp(angulo_ptz_pan + PASO_ACTUADOR, ptz_pan_min, ptz_pan_max)
                 if actuadores_multieje: actuadores_multieje[0].mover_eje('pan', angulo_ptz_pan)
+
+            # Control Torreta (Asumiendo que es el segundo actuador multieje)
+            elif tecla == 'i':
+                angulo_torreta_elev = clamp(angulo_torreta_elev + PASO_ACTUADOR, tor_elev_min, tor_elev_max)
+                if len(actuadores_multieje) > 1:
+                    actuadores_multieje[1].mover_eje('elevacion', angulo_torreta_elev)
+
+            elif tecla == 'k':
+                angulo_torreta_elev = clamp(angulo_torreta_elev - PASO_ACTUADOR, tor_elev_min, tor_elev_max)
+                if len(actuadores_multieje) > 1:
+                    actuadores_multieje[1].mover_eje('elevacion', angulo_torreta_elev)
+
+            elif tecla == 'j':
+                angulo_torreta_giro = clamp(angulo_torreta_giro - PASO_ACTUADOR, tor_giro_min, tor_giro_max)
+                if len(actuadores_multieje) > 1:
+                    actuadores_multieje[1].mover_eje('giro', angulo_torreta_giro)
+
+            elif tecla == 'l':
+                angulo_torreta_giro = clamp(angulo_torreta_giro + PASO_ACTUADOR, tor_giro_min, tor_giro_max)
+                if len(actuadores_multieje) > 1:
+                    actuadores_multieje[1].mover_eje('giro', angulo_torreta_giro)
 
             elif tecla == ' ':
                 velocidad_motor = 0
@@ -101,7 +156,11 @@ def main():
                 break
             
             # Feedback visual limpio
-            sys.stdout.write(f"\rMotor: {velocidad_motor}% | Dir: {angulo_direccion}° | PTZ: {angulo_ptz_pan}°/{angulo_ptz_tilt}°   ")
+            sys.stdout.write(
+                f"\rMotor: {velocidad_motor}% | Dir: {angulo_direccion}° "
+                f"| PTZ: {angulo_ptz_pan}°/{angulo_ptz_tilt}° "
+                f"| Torreta: {angulo_torreta_giro}°/{angulo_torreta_elev}°   "
+            )
             sys.stdout.flush()
 
     except Exception as e:
